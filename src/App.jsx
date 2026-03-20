@@ -88,6 +88,10 @@ export default function App() {
     };
   }, [cases]);
 
+  function makeLocalCaseId() {
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   async function fetchTruckPresets() {
     const { data, error } = await supabase
       .from('truck_presets')
@@ -210,7 +214,7 @@ export default function App() {
 
   function duplicateSelected() {
     if (!selectedCase || !selectedTruck) return;
-    const newId = Math.max(...cases.map((c) => Number(c.id) || 0), 0) + 1;
+    const newId = makeLocalCaseId();
     setCases((prev) => [
       ...prev,
       {
@@ -282,7 +286,7 @@ export default function App() {
     setSelectedTruckId(pack.truck_preset_id || '');
     setCases(
       (packCases ?? []).map((c) => ({
-        id: Number(c.id),
+        id: String(c.id),
         templateId: c.template_id,
         name: c.name,
         x: Number(c.x),
@@ -481,7 +485,7 @@ export default function App() {
   function addCaseFromTemplate(template, x = 1, y = 1) {
     if (!selectedTruck) return;
 
-    const newId = Math.max(...cases.map((c) => Number(c.id) || 0), 0) + 1;
+    const newId = makeLocalCaseId();
     const w = Number(template.length_in) / 6;
     const h = Number(template.width_in) / 6;
 
