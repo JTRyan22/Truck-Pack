@@ -21,9 +21,14 @@ export default function App() {
   const [newW, setNewW] = useState('');
   const [newH, setNewH] = useState('');
 
+  const [packs, setPacks] = useState([]);
+  const [selectedPackId, setSelectedPackId] = useState('');
+  const [packName, setPackName] = useState('');
+
   useEffect(() => {
     fetchTruckPresets();
     fetchTemplates();
+    fetchPacks();
   }, []);
 
   async function fetchTruckPresets() {
@@ -61,6 +66,20 @@ export default function App() {
     }
 
     setTemplates(data ?? []);
+  }
+
+  async function fetchPacks() {
+    const { data, error } = await supabase
+      .from('packs')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Error loading packs:', error);
+      return;
+    }
+
+    setPacks(data ?? []);
   }
 
   const selectedTruck =
@@ -134,7 +153,7 @@ export default function App() {
 
   function duplicateSelected() {
     if (!selectedCase || !selectedTruck) return;
-    const newId = Math.max(...cases.map((c) => c.id), 0) + 1;
+    const newId = Math.max(...cases.map((c) => Number(c.id) || 0), 0) + 1;
     setCases((prev) => [
       ...prev,
       {
@@ -162,6 +181,138 @@ export default function App() {
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
+  }
+
+  function newPack() {
+    setSelectedPackId('');
+    setPackName('');
+    clearTruck();
+  }
+
+  async function loadPack(packId) {
+    if (!packId) return;
+
+    const { data: pack, error: packError } = await supabase
+      .from('packs')
+      .select('*')
+      .eq('id', packId)
+      .single();
+
+    if (packError) {
+      console.error('Error loading pack:', packError);
+      return;
+    }
+
+    const { data: packCases, error: casesError } = await supabase
+      .from('pack_cases')
+      .select('*')
+      .eq('pack_id', packId)
+      .order('z', { ascending: true });
+
+    if (casesError) {
+      console.error('Error loading pack cases:', casesError);
+      return;
+    }
+
+    setSelectedPackId(pack.id);
+    setPackName(pack.name || '');
+    setSelectedTruckId(pack.truck_preset_id || '');
+    setCases(
+      (packCases ?? []).map((c) => ({
+        id: Number(c.id),
+        templateId: c.template_id,
+        name: c.name,
+        x: Number(c.x),
+        y: Number(c.y),
+        w: Number(c.w),
+        h: Number(c.h),
+        z: Number(c.z),
+        stackCount: Number(c.stack_count || 1),
+      }))
+    );
+    setSelectedId(null);
+  }
+
+  async function savePack(saveAsNew = false) {
+    if (!packName.trim()) {
+      alert('Enter a Pack name first.');
+      return;
+    }
+
+    if (!selectedTruckId) {
+      alert('Select a truck first.');
+      return;
+    }
+
+    const packId = saveAsNew || !selectedPackId ? `pack-${Date.now()}` : selectedPackId;
+
+    const packRow = {
+      id: packId,
+      name: packName.trim(),
+      truck_preset_id: selectedTruckId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (saveAsNew || !selectedPackId) {
+      packRow.created_at = new Date().toISOString();
+    }
+
+    const { error: packError } = await supabase.from('packs').upsert([packRow]);
+
+    if (packError) {
+      console.error('Error saving pack:', packError);
+      return;
+    }
+
+    const { error: deleteError } = await supabase
+      .from('pack_cases')
+      .delete()
+      .eq('pack_id', packId);
+
+    if (deleteError) {
+      console.error('Error clearing old pack cases:', deleteError);
+      return;
+    }
+
+    if (cases.length > 0) {
+      const rows = cases.map((c, index) => ({
+        id: `${packId}-case-${index + 1}`,
+        pack_id: packId,
+        template_id: c.templateId || null,
+        name: c.name,
+        x: c.x,
+        y: c.y,
+        w: c.w,
+        h: c.h,
+        z: c.z,
+        stack_count: c.stackCount || 1,
+      }));
+
+      const { error: insertError } = await supabase.from('pack_cases').insert(rows);
+
+      if (insertError) {
+        console.error('Error saving pack cases:', insertError);
+        return;
+      }
+    }
+
+    setSelectedPackId(packId);
+    await fetchPacks();
+    alert(saveAsNew || !selectedPackId ? 'Pack saved.' : 'Pack updated.');
+  }
+
+  async function deletePack() {
+    if (!selectedPackId) return;
+
+    const { error } = await supabase.from('packs').delete().eq('id', selectedPackId);
+
+    if (error) {
+      console.error('Error deleting pack:', error);
+      return;
+    }
+
+    newPack();
+    fetchPacks();
   }
 
   async function addTemplate() {
@@ -267,7 +418,7 @@ export default function App() {
   function addCaseFromTemplate(template, x = 1, y = 1) {
     if (!selectedTruck) return;
 
-    const newId = Math.max(...cases.map((c) => c.id), 0) + 1;
+    const newId = Math.max(...cases.map((c) => Number(c.id) || 0), 0) + 1;
     const w = Number(template.length_in) / 6;
     const h = Number(template.width_in) / 6;
 
@@ -412,6 +563,48 @@ export default function App() {
       <div className="flex gap-6 items-start">
         <div className="w-[240px] space-y-4 shrink-0">
           <div className="bg-slate-800 p-3 rounded">
+            <h3 className="text-lg font-semibold mb-2">Pack</h3>
+
+            <input
+              placeholder="Pack Name"
+              value={packName}
+              onChange={(e) => setPackName(e.target.value)}
+              className="w-full mb-2 p-2 bg-slate-900 rounded"
+            />
+
+            <select
+              value={selectedPackId}
+              onChange={(e) => {
+                setSelectedPackId(e.target.value);
+                if (e.target.value) loadPack(e.target.value);
+              }}
+              className="w-full mb-2 bg-slate-900 p-2 rounded"
+            >
+              <option value="">Select Saved Pack</option>
+              {packs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={newPack} className="bg-slate-700 p-2 rounded">
+                New
+              </button>
+              <button onClick={() => savePack(false)} className="bg-sky-700 p-2 rounded">
+                Save
+              </button>
+              <button onClick={() => savePack(true)} className="bg-slate-700 p-2 rounded">
+                Save As
+              </button>
+              <button onClick={deletePack} className="bg-rose-700 p-2 rounded">
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Truck Size</h3>
               <button
@@ -498,12 +691,12 @@ export default function App() {
           <div className="bg-slate-800 p-3 rounded">
             <h3 className="mb-2 text-lg font-semibold">Instructions</h3>
             <div className="text-sm text-slate-300 space-y-1">
-              <p>1. Truck sizes and case templates now sync through Supabase.</p>
-              <p>2. Add case types in inches.</p>
-              <p>3. Drag cases into the truck grid.</p>
-              <p>4. Drag a matching case onto the same spot to stack it.</p>
-              <p>5. Double-click a case in the truck to rotate it.</p>
-              <p>6. Placed cases in the grid are still local for now.</p>
+              <p>1. Packs save layouts without overwriting each other.</p>
+              <p>2. Truck sizes and case templates sync through Supabase.</p>
+              <p>3. Add case types in inches.</p>
+              <p>4. Drag cases into the truck grid.</p>
+              <p>5. Drag a matching case onto the same spot to stack it.</p>
+              <p>6. Double-click a case in the truck to rotate it.</p>
             </div>
           </div>
 
