@@ -499,6 +499,117 @@ export default function App() {
             </div>
           </div>
 
+          {selectedCase && (
+            <div className="bg-slate-800 p-3 rounded space-y-2">
+              <h3 className="text-lg font-semibold">Selected Case</h3>
+              <input
+                value={selectedCase.name}
+                onChange={(e) => renameSelected(e.target.value)}
+                className="w-full bg-slate-900 p-1 rounded"
+              />
+              <div className="text-sm text-slate-400">
+                Stack qty: {selectedCase.stackCount || 1}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={rotateSelected}
+                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                >
+                  Rotate
+                </button>
+                <button
+                  onClick={duplicateSelected}
+                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                >
+                  Duplicate
+                </button>
+                <button
+                  onClick={removeSelected}
+                  className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <div
+            ref={truckRef}
+            onDragOver={handleTruckDragOver}
+            onDrop={handleDrop}
+            className="relative border border-slate-500 bg-slate-950 overflow-auto rounded"
+            style={{
+              width: Math.max(truck.width * scale, 300),
+              height: Math.max(truck.height * scale, 300),
+              backgroundImage: `
+                linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
+              `,
+              backgroundSize: `${scale}px ${scale}px`,
+            }}
+          >
+            {displayedCases.map((c) => (
+              <div
+                key={c.id}
+                draggable
+                onClick={() => setSelectedId(c.id)}
+                onDragStart={() => handlePlacedCaseDragStart(c)}
+                onDragEnd={handleDragEnd}
+                onDoubleClick={() => {
+                  if (!selectedTruck) return;
+                  setCases((prev) =>
+                    prev.map((item) => {
+                      if (item.id !== c.id) return item;
+                      const rotated = { ...item, w: item.h, h: item.w };
+                      return {
+                        ...rotated,
+                        x: Math.min(rotated.x, truck.width - rotated.w),
+                        y: Math.min(rotated.y, truck.height - rotated.h),
+                      };
+                    })
+                  );
+                }}
+                className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center cursor-move ${
+                  selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
+                }`}
+                style={{
+                  left: c.x * scale,
+                  top: c.y * scale,
+                  width: c.w * scale,
+                  height: c.h * scale,
+                  zIndex: c.z,
+                }}
+              >
+                {c.name}
+                {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCases((prev) => prev.filter((item) => item.id !== c.id));
+                    if (selectedId === c.id) setSelectedId(null);
+                  }}
+                  className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                >
+                  X
+                </button>
+              </div>
+            ))}
+
+            {ghost && (
+              <div
+                className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
+                style={{
+                  left: ghost.x * scale,
+                  top: ghost.y * scale,
+                  width: ghost.w * scale,
+                  height: ghost.h * scale,
+                }}
+              />
+            )}
+          </div>
+
           <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Case Selection</h3>
@@ -543,115 +654,6 @@ export default function App() {
               </div>
             ))}
           </div>
-
-          {selectedCase && (
-            <div className="bg-slate-800 p-3 rounded space-y-2">
-              <h3 className="text-lg font-semibold">Selected Case</h3>
-              <input
-                value={selectedCase.name}
-                onChange={(e) => renameSelected(e.target.value)}
-                className="w-full bg-slate-900 p-1 rounded"
-              />
-              <div className="text-sm text-slate-400">
-                Stack qty: {selectedCase.stackCount || 1}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={rotateSelected}
-                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                >
-                  Rotate
-                </button>
-                <button
-                  onClick={duplicateSelected}
-                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                >
-                  Duplicate
-                </button>
-                <button
-                  onClick={removeSelected}
-                  className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div
-          ref={truckRef}
-          onDragOver={handleTruckDragOver}
-          onDrop={handleDrop}
-          className="relative border border-slate-500 bg-slate-950 overflow-auto rounded"
-          style={{
-            width: Math.max(truck.width * scale, 300),
-            height: Math.max(truck.height * scale, 300),
-            backgroundImage: `
-              linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
-            `,
-            backgroundSize: `${scale}px ${scale}px`,
-          }}
-        >
-          {displayedCases.map((c) => (
-            <div
-              key={c.id}
-              draggable
-              onClick={() => setSelectedId(c.id)}
-              onDragStart={() => handlePlacedCaseDragStart(c)}
-              onDragEnd={handleDragEnd}
-              onDoubleClick={() => {
-                if (!selectedTruck) return;
-                setCases((prev) =>
-                  prev.map((item) => {
-                    if (item.id !== c.id) return item;
-                    const rotated = { ...item, w: item.h, h: item.w };
-                    return {
-                      ...rotated,
-                      x: Math.min(rotated.x, truck.width - rotated.w),
-                      y: Math.min(rotated.y, truck.height - rotated.h),
-                    };
-                  })
-                );
-              }}
-              className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center cursor-move ${
-                selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
-              }`}
-              style={{
-                left: c.x * scale,
-                top: c.y * scale,
-                width: c.w * scale,
-                height: c.h * scale,
-                zIndex: c.z,
-              }}
-            >
-              {c.name}
-              {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCases((prev) => prev.filter((item) => item.id !== c.id));
-                  if (selectedId === c.id) setSelectedId(null);
-                }}
-                className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
-              >
-                X
-              </button>
-            </div>
-          ))}
-
-          {ghost && (
-            <div
-              className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
-              style={{
-                left: ghost.x * scale,
-                top: ghost.y * scale,
-                width: ghost.w * scale,
-                height: ghost.h * scale,
-              }}
-            />
-          )}
         </div>
       </div>
     </div>
