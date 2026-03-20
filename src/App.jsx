@@ -25,6 +25,14 @@ export default function App() {
   const [selectedPackId, setSelectedPackId] = useState('');
   const [packName, setPackName] = useState('');
 
+  const pointerDragRef = useRef({
+    active: false,
+    caseId: null,
+    pointerId: null,
+    offsetX: 0,
+    offsetY: 0,
+  });
+
   useEffect(() => {
     fetchTruckPresets();
     fetchTemplates();
@@ -181,6 +189,13 @@ export default function App() {
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
+    pointerDragRef.current = {
+      active: false,
+      caseId: null,
+      pointerId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
   }
 
   function newPack() {
@@ -452,6 +467,19 @@ export default function App() {
     };
   }
 
+  function getTruckPositionFromTopLeft(clientX, clientY, item, offsetX, offsetY) {
+    const rect = truckRef.current?.getBoundingClientRect();
+    if (!rect || !item || !selectedTruck) return null;
+
+    const rawX = (clientX - rect.left - offsetX) / scale;
+    const rawY = (clientY - rect.top - offsetY) / scale;
+
+    return {
+      x: clamp(snapHalf(rawX), 0, truck.width - item.w),
+      y: clamp(snapHalf(rawY), 0, truck.height - item.h),
+    };
+  }
+
   function findStackTarget(item, pos, ignoreId = null) {
     return (
       cases.find((c) => {
@@ -492,13 +520,6 @@ export default function App() {
       setGhost(pos ? { ...draggingTemplate, stackCount: 1, ...pos } : null);
       return;
     }
-
-    if (draggingCaseId !== null) {
-      const draggedCase = cases.find((c) => c.id === draggingCaseId);
-      if (!draggedCase) return;
-      const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
-      setGhost(pos ? { ...draggedCase, ...pos } : null);
-    }
   }
 
   function handleDrop(e) {
@@ -522,29 +543,6 @@ export default function App() {
       }
     }
 
-    if (draggingCaseId !== null) {
-      const dragged = cases.find((c) => c.id === draggingCaseId);
-      const pos = getTruckPosition(e.clientX, e.clientY, dragged);
-
-      if (dragged && pos) {
-        const target = findStackTarget(dragged, pos, draggingCaseId);
-        if (target) {
-          setCases((prev) =>
-            prev
-              .map((c) =>
-                c.id === target.id
-                  ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
-                  : c
-              )
-              .filter((c) => c.id !== draggingCaseId)
-          );
-          setSelectedId(target.id);
-        } else {
-          updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
-        }
-      }
-    }
-
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
@@ -554,6 +552,113 @@ export default function App() {
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
+  }
+
+  function handlePlacedCasePointerDown(e, caseItem) {
+    if (!selectedTruck) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const rect = e.currentTarget.getBoundingClientRect();
+
+    pointerDragRef.current = {
+      active: true,
+      caseId: caseItem.id,
+      pointerId: e.pointerId,
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+
+    setSelectedId(caseItem.id);
+    setDraggingCaseId(caseItem.id);
+    setGhost(null);
+
+    if (e.currentTarget.setPointerCapture) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+  }
+
+  function handlePlacedCasePointerMove(e, caseItem) {
+    const drag = pointerDragRef.current;
+    if (!drag.active || drag.caseId !== caseItem.id || drag.pointerId !== e.pointerId) return;
+
+    e.preventDefault();
+
+    const pos = getTruckPositionFromTopLeft(
+      e.clientX,
+      e.clientY,
+      caseItem,
+      drag.offsetX,
+      drag.offsetY
+    );
+
+    if (!pos) return;
+
+    setCases((prev) =>
+      prev.map((c) =>
+        c.id === caseItem.id
+          ? {
+              ...c,
+              x: pos.x,
+              y: pos.y,
+            }
+          : c
+      )
+    );
+  }
+
+  function handlePlacedCasePointerUp(e, caseItem) {
+    const drag = pointerDragRef.current;
+    if (!drag.active || drag.caseId !== caseItem.id || drag.pointerId !== e.pointerId) return;
+
+    e.preventDefault();
+    finishPlacedCasePointerDrag(caseItem.id);
+
+    if (e.currentTarget.releasePointerCapture) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  function handlePlacedCasePointerCancel(caseItem) {
+    const drag = pointerDragRef.current;
+    if (!drag.active || drag.caseId !== caseItem.id) return;
+    finishPlacedCasePointerDrag(caseItem.id);
+  }
+
+  function finishPlacedCasePointerDrag(caseId) {
+    const dragged = cases.find((c) => c.id === caseId);
+
+    if (dragged) {
+      const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
+
+      if (target) {
+        setCases((prev) =>
+          prev
+            .map((c) =>
+              c.id === target.id
+                ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
+                : c
+            )
+            .filter((c) => c.id !== caseId)
+        );
+        setSelectedId(target.id);
+      }
+    }
+
+    pointerDragRef.current = {
+      active: false,
+      caseId: null,
+      pointerId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+
+    setDraggingCaseId(null);
   }
 
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
@@ -745,6 +850,7 @@ export default function App() {
               style={{
                 width: truckPixelWidth,
                 height: truckPixelHeight,
+                touchAction: 'none',
                 backgroundImage: `
                   linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
                   linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
@@ -755,10 +861,11 @@ export default function App() {
               {displayedCases.map((c) => (
                 <div
                   key={c.id}
-                  draggable
                   onClick={() => setSelectedId(c.id)}
-                  onDragStart={() => handlePlacedCaseDragStart(c)}
-                  onDragEnd={handleDragEnd}
+                  onPointerDown={(e) => handlePlacedCasePointerDown(e, c)}
+                  onPointerMove={(e) => handlePlacedCasePointerMove(e, c)}
+                  onPointerUp={(e) => handlePlacedCasePointerUp(e, c)}
+                  onPointerCancel={() => handlePlacedCasePointerCancel(c)}
                   onDoubleClick={() => {
                     if (!selectedTruck) return;
                     setCases((prev) =>
@@ -773,20 +880,23 @@ export default function App() {
                       })
                     );
                   }}
-                  className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center cursor-move ${
+                  className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center ${
                     selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
-                  }`}
+                  } ${draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'}`}
                   style={{
                     left: c.x * scale,
                     top: c.y * scale,
                     width: c.w * scale,
                     height: c.h * scale,
                     zIndex: c.z,
+                    touchAction: 'none',
+                    userSelect: 'none',
                   }}
                 >
                   {c.name}
                   {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
                   <button
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       setCases((prev) => prev.filter((item) => item.id !== c.id));
