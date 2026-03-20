@@ -1,80 +1,74 @@
-import React, { useRef, useState, useEffect } from 'react';
-
-const STORAGE_KEY = 'truck-pack-app-state-v3';
-
-const DEFAULT_TRUCKS = [
-  { id: '24', name: '24 ft', lengthFt: 24, widthFt: 8.5 },
-  { id: '26', name: '26 ft', lengthFt: 26, widthFt: 8.5 },
-  { id: '27', name: '27 ft', lengthFt: 27, widthFt: 8.5 },
-];
-
-function loadSavedState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
+import React, { useEffect, useRef, useState } from 'react';
+import { supabase } from './supabase';
 
 export default function App() {
-  const saved = loadSavedState();
-
-  const [truckPresets, setTruckPresets] = useState(
-    saved?.truckPresets?.length ? saved.truckPresets : DEFAULT_TRUCKS
-  );
-  const [selectedTruckId, setSelectedTruckId] = useState(
-    saved?.selectedTruckId || '26'
-  );
-  const [cases, setCases] = useState(
-    Array.isArray(saved?.cases) ? saved.cases : []
-  );
-  const [templates, setTemplates] = useState(
-    Array.isArray(saved?.templates) ? saved.templates : []
-  );
-  const [selectedId, setSelectedId] = useState(
-    saved?.selectedId ?? null
-  );
-
+  const [truckPresets, setTruckPresets] = useState([]);
+  const [selectedTruckId, setSelectedTruckId] = useState('');
   const [customTruckName, setCustomTruckName] = useState('');
   const [customTruckLength, setCustomTruckLength] = useState('');
   const [customTruckWidth, setCustomTruckWidth] = useState('');
+
+  const [cases, setCases] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [draggingTemplate, setDraggingTemplate] = useState(null);
+  const [draggingCaseId, setDraggingCaseId] = useState(null);
+  const [ghost, setGhost] = useState(null);
+  const truckRef = useRef(null);
+
+  const [templates, setTemplates] = useState([]);
 
   const [newName, setNewName] = useState('');
   const [newW, setNewW] = useState('');
   const [newH, setNewH] = useState('');
 
-  const [draggingTemplate, setDraggingTemplate] = useState(null);
-  const [draggingCaseId, setDraggingCaseId] = useState(null);
-  const [ghost, setGhost] = useState(null);
-
-  const truckRef = useRef(null);
-
   useEffect(() => {
-    try {
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          truckPresets,
-          selectedTruckId,
-          cases,
-          templates,
-          selectedId,
-        })
-      );
-    } catch (err) {
-      console.error('Save failed:', err);
+    fetchTruckPresets();
+    fetchTemplates();
+  }, []);
+
+  async function fetchTruckPresets() {
+    const { data, error } = await supabase
+      .from('truck_presets')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error loading truck presets:', error);
+      return;
     }
-  }, [truckPresets, selectedTruckId, cases, templates, selectedId]);
+
+    const rows = data ?? [];
+    setTruckPresets(rows);
+
+    setSelectedTruckId((current) => {
+      if (current && rows.some((t) => t.id === current)) return current;
+      return rows[0]?.id ?? '';
+    });
+  }
+
+  async function fetchTemplates() {
+    const { data, error } = await supabase
+      .from('case_templates')
+      .select('*')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error loading case templates:', error);
+      return;
+    }
+
+    setTemplates(data ?? []);
+  }
 
   const selectedTruck =
-    truckPresets.find((t) => t.id === selectedTruckId) || truckPresets[0];
+    truckPresets.find((t) => t.id === selectedTruckId) || truckPresets[0] || null;
 
-  const truck = {
-    width: (selectedTruck.lengthFt * 12) / 6,
-    height: (selectedTruck.widthFt * 12) / 6,
-  };
+  const truck = selectedTruck
+    ? {
+        width: (Number(selectedTruck.length_ft) * 12) / 6,
+        height: (Number(selectedTruck.width_ft) * 12) / 6,
+      }
+    : { width: 0, height: 0 };
 
   const scale = 14;
   const selectedCase = cases.find((c) => c.id === selectedId) ?? null;
@@ -95,12 +89,22 @@ export default function App() {
     setCases((prev) => prev.map((c) => (c.id === id ? updater(c) : c)));
   }
 
-  function renameTemplate(templateId, newNameValue) {
+  async function renameTemplate(templateId, newNameValue) {
     setTemplates((prev) =>
       prev.map((template) =>
         template.id === templateId ? { ...template, name: newNameValue } : template
       )
     );
+
+    const { error } = await supabase
+      .from('case_templates')
+      .update({ name: newNameValue })
+      .eq('id', templateId);
+
+    if (error) {
+      console.error('Error renaming template:', error);
+      fetchTemplates();
+    }
   }
 
   function renameSelected(newNameValue) {
@@ -109,7 +113,7 @@ export default function App() {
   }
 
   function rotateSelected() {
-    if (!selectedCase) return;
+    if (!selectedCase || !selectedTruck) return;
     updateCase(selectedCase.id, (c) => {
       const rotated = { ...c, w: c.h, h: c.w };
       return {
@@ -121,7 +125,7 @@ export default function App() {
   }
 
   function duplicateSelected() {
-    if (!selectedCase) return;
+    if (!selectedCase || !selectedTruck) return;
     const newId = Math.max(...cases.map((c) => c.id), 0) + 1;
     setCases((prev) => [
       ...prev,
@@ -152,7 +156,7 @@ export default function App() {
     setGhost(null);
   }
 
-  function addTemplate() {
+  async function addTemplate() {
     const lengthIn = parseFloat(newW);
     const widthIn = parseFloat(newH);
 
@@ -166,22 +170,27 @@ export default function App() {
       return;
     }
 
-    setTemplates((prev) => [
-      ...prev,
-      {
-        id: `t${Date.now()}`,
-        name: newName.trim(),
-        w: lengthIn / 6,
-        h: widthIn / 6,
-      },
-    ]);
+    const newTemplate = {
+      id: `template-${Date.now()}`,
+      name: newName.trim(),
+      length_in: lengthIn,
+      width_in: widthIn,
+    };
+
+    const { error } = await supabase.from('case_templates').insert([newTemplate]);
+
+    if (error) {
+      console.error('Error adding template:', error);
+      return;
+    }
 
     setNewName('');
     setNewW('');
     setNewH('');
+    fetchTemplates();
   }
 
-  function addTruckPreset() {
+  async function addTruckPreset() {
     const lengthFt = parseFloat(customTruckLength);
     const widthFt = parseFloat(customTruckWidth);
 
@@ -198,33 +207,72 @@ export default function App() {
     const newTruck = {
       id: `truck-${Date.now()}`,
       name: customTruckName.trim(),
-      lengthFt,
-      widthFt,
+      length_ft: lengthFt,
+      width_ft: widthFt,
     };
 
-    setTruckPresets((prev) => [...prev, newTruck]);
-    setSelectedTruckId(newTruck.id);
+    const { error } = await supabase.from('truck_presets').insert([newTruck]);
+
+    if (error) {
+      console.error('Error adding truck preset:', error);
+      return;
+    }
+
     setCustomTruckName('');
     setCustomTruckLength('');
     setCustomTruckWidth('');
+    await fetchTruckPresets();
+    setSelectedTruckId(newTruck.id);
   }
 
-  function deleteSelectedTruck() {
-    if (truckPresets.length <= 1) return;
-    const remaining = truckPresets.filter((t) => t.id !== selectedTruckId);
-    setTruckPresets(remaining);
-    setSelectedTruckId(remaining[0].id);
+  async function deleteSelectedTruck() {
+    if (truckPresets.length <= 1 || !selectedTruckId) return;
+
+    const { error } = await supabase
+      .from('truck_presets')
+      .delete()
+      .eq('id', selectedTruckId);
+
+    if (error) {
+      console.error('Error deleting truck preset:', error);
+      return;
+    }
+
+    clearTruck();
+    fetchTruckPresets();
+  }
+
+  async function deleteTemplate(id) {
+    const { error } = await supabase
+      .from('case_templates')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting template:', error);
+      return;
+    }
+
+    fetchTemplates();
   }
 
   function addCaseFromTemplate(template, x = 1, y = 1) {
+    if (!selectedTruck) return;
+
     const newId = Math.max(...cases.map((c) => c.id), 0) + 1;
+    const w = Number(template.length_in) / 6;
+    const h = Number(template.width_in) / 6;
+
     setCases((prev) => [
       ...prev,
       {
-        ...template,
         id: newId,
-        x: clamp(snapHalf(x), 0, truck.width - template.w),
-        y: clamp(snapHalf(y), 0, truck.height - template.h),
+        templateId: template.id,
+        name: template.name,
+        w,
+        h,
+        x: clamp(snapHalf(x), 0, truck.width - w),
+        y: clamp(snapHalf(y), 0, truck.height - h),
         z: nextZ(prev),
         stackCount: 1,
       },
@@ -234,7 +282,7 @@ export default function App() {
 
   function getTruckPosition(clientX, clientY, item) {
     const rect = truckRef.current?.getBoundingClientRect();
-    if (!rect || !item) return null;
+    if (!rect || !item || !selectedTruck) return null;
 
     const rawX = (clientX - rect.left) / scale - item.w / 2;
     const rawY = (clientY - rect.top) / scale - item.h / 2;
@@ -259,7 +307,12 @@ export default function App() {
   }
 
   function handleTemplateDragStart(template) {
-    setDraggingTemplate(template);
+    const dragTemplate = {
+      ...template,
+      w: Number(template.length_in) / 6,
+      h: Number(template.width_in) / 6,
+    };
+    setDraggingTemplate(dragTemplate);
     setDraggingCaseId(null);
   }
 
@@ -272,6 +325,8 @@ export default function App() {
 
   function handleTruckDragOver(event) {
     event.preventDefault();
+
+    if (!selectedTruck) return;
 
     if (draggingTemplate) {
       const pos = getTruckPosition(event.clientX, event.clientY, draggingTemplate);
@@ -289,6 +344,8 @@ export default function App() {
 
   function handleDrop(e) {
     e.preventDefault();
+
+    if (!selectedTruck) return;
 
     if (draggingTemplate) {
       const pos = getTruckPosition(e.clientX, e.clientY, draggingTemplate);
@@ -347,18 +404,31 @@ export default function App() {
       <div className="grid lg:grid-cols-[320px_1fr] gap-6 items-start">
         <div className="space-y-4">
           <div className="bg-slate-800 p-3 rounded">
-            <h3 className="mb-2 text-lg font-semibold">Truck Size</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-semibold">Truck Size</h3>
+              <button
+                onClick={fetchTruckPresets}
+                className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
+              >
+                Refresh
+              </button>
+            </div>
+
             <select
               value={selectedTruckId}
-              onChange={(e) => setSelectedTruckId(e.target.value)}
+              onChange={(e) => {
+                setSelectedTruckId(e.target.value);
+                clearTruck();
+              }}
               className="w-full bg-slate-900 p-2 rounded"
             >
               {truckPresets.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.name} ({t.lengthFt} ft x {t.widthFt} ft)
+                  {t.name} ({Number(t.length_ft)} ft x {Number(t.width_ft)} ft)
                 </option>
               ))}
             </select>
+
             <button
               onClick={deleteSelectedTruck}
               className="mt-2 w-full bg-rose-700 p-1 rounded text-sm"
@@ -420,20 +490,29 @@ export default function App() {
           <div className="bg-slate-800 p-3 rounded">
             <h3 className="mb-2 text-lg font-semibold">Instructions</h3>
             <div className="text-sm text-slate-300 space-y-1">
-              <p>1. Add truck sizes or choose one from the dropdown.</p>
+              <p>1. Truck sizes and case templates now sync through Supabase.</p>
               <p>2. Add case types in inches.</p>
               <p>3. Drag cases into the truck grid.</p>
               <p>4. Drag a matching case onto the same spot to stack it.</p>
               <p>5. Double-click a case in the truck to rotate it.</p>
+              <p>6. Placed cases in the grid are still local for now.</p>
             </div>
           </div>
 
           <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Case Selection</h3>
-              <button onClick={clearTruck} className="bg-rose-700 px-2 py-1 rounded text-sm">
-                Clear Truck
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={fetchTemplates}
+                  className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
+                >
+                  Refresh
+                </button>
+                <button onClick={clearTruck} className="bg-rose-700 px-2 py-1 rounded text-sm">
+                  Clear Truck
+                </button>
+              </div>
             </div>
 
             {templates.map((t) => (
@@ -450,12 +529,12 @@ export default function App() {
                   className="w-full bg-slate-900 p-1 rounded mb-1"
                 />
                 <div className="text-sm text-slate-300">
-                  {(t.w * 6).toFixed(2)} L × {(t.h * 6).toFixed(2)} W in
+                  {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    setTemplates((prev) => prev.filter((item) => item.id !== t.id));
+                    deleteTemplate(t.id);
                   }}
                   className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
                 >
@@ -506,8 +585,8 @@ export default function App() {
           onDrop={handleDrop}
           className="relative border border-slate-500 bg-slate-950 overflow-auto rounded"
           style={{
-            width: truck.width * scale,
-            height: truck.height * scale,
+            width: Math.max(truck.width * scale, 300),
+            height: Math.max(truck.height * scale, 300),
             backgroundImage: `
               linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
               linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
@@ -523,6 +602,7 @@ export default function App() {
               onDragStart={() => handlePlacedCaseDragStart(c)}
               onDragEnd={handleDragEnd}
               onDoubleClick={() => {
+                if (!selectedTruck) return;
                 setCases((prev) =>
                   prev.map((item) => {
                     if (item.id !== c.id) return item;
