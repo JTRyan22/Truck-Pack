@@ -11,6 +11,7 @@ export default function App() {
   const [cases, setCases] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [draggingTemplate, setDraggingTemplate] = useState(null);
+  const [draggingCaseId, setDraggingCaseId] = useState(null);
   const [ghost, setGhost] = useState(null);
   const truckRef = useRef(null);
 
@@ -235,6 +236,7 @@ export default function App() {
     setCases([]);
     setSelectedId(null);
     setDraggingTemplate(null);
+    setDraggingCaseId(null);
     setGhost(null);
     touchDragRef.current = {
       active: false,
@@ -539,6 +541,36 @@ export default function App() {
     );
   }
 
+  function finishCaseMove(caseId, caseSnapshot = null) {
+    const dragged = caseSnapshot || cases.find((c) => c.id === caseId);
+
+    if (dragged) {
+      const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
+
+      if (target) {
+        setCases((prev) =>
+          prev
+            .map((c) =>
+              c.id === target.id
+                ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
+                : c
+            )
+            .filter((c) => c.id !== caseId)
+        );
+        setSelectedId(target.id);
+      }
+    }
+
+    setDraggingCaseId(null);
+
+    touchDragRef.current = {
+      active: false,
+      caseId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+  }
+
   function handleTemplateDragStart(template) {
     const dragTemplate = {
       ...template,
@@ -546,6 +578,14 @@ export default function App() {
       h: Number(template.width_in) / 6,
     };
     setDraggingTemplate(dragTemplate);
+    setDraggingCaseId(null);
+  }
+
+  function handlePlacedCaseDragStart(caseItem) {
+    setDraggingCaseId(caseItem.id);
+    setDraggingTemplate(null);
+    setSelectedId(caseItem.id);
+    setGhost({ ...caseItem });
   }
 
   function handleTruckDragOver(event) {
@@ -556,6 +596,14 @@ export default function App() {
     if (draggingTemplate) {
       const pos = getTruckPosition(event.clientX, event.clientY, draggingTemplate);
       setGhost(pos ? { ...draggingTemplate, stackCount: 1, ...pos } : null);
+      return;
+    }
+
+    if (draggingCaseId !== null) {
+      const draggedCase = cases.find((c) => c.id === draggingCaseId);
+      if (!draggedCase) return;
+      const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
+      setGhost(pos ? { ...draggedCase, ...pos } : null);
     }
   }
 
@@ -580,58 +628,40 @@ export default function App() {
       }
     }
 
+    if (draggingCaseId !== null) {
+      const dragged = cases.find((c) => c.id === draggingCaseId);
+      const pos = getTruckPosition(e.clientX, e.clientY, dragged);
+
+      if (dragged && pos) {
+        const updated = { ...dragged, x: pos.x, y: pos.y };
+        const target = findStackTarget(updated, pos, draggingCaseId);
+
+        if (target) {
+          setCases((prev) =>
+            prev
+              .map((c) =>
+                c.id === target.id
+                  ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
+                  : c
+              )
+              .filter((c) => c.id !== draggingCaseId)
+          );
+          setSelectedId(target.id);
+        } else {
+          updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
+        }
+      }
+    }
+
     setDraggingTemplate(null);
+    setDraggingCaseId(null);
     setGhost(null);
   }
 
   function handleDragEnd() {
     setDraggingTemplate(null);
+    setDraggingCaseId(null);
     setGhost(null);
-  }
-
-  function handlePlacedCaseMouseDragStart(e, caseItem) {
-    const rect = e.currentTarget.getBoundingClientRect();
-
-    touchDragRef.current = {
-      active: true,
-      caseId: caseItem.id,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
-
-    setSelectedId(caseItem.id);
-  }
-
-  function handlePlacedCaseMouseDrag(e, caseItem) {
-    if (!touchDragRef.current.active || touchDragRef.current.caseId !== caseItem.id) return;
-    if (e.clientX === 0 && e.clientY === 0) return;
-
-    const pos = getTruckPositionFromTopLeft(
-      e.clientX,
-      e.clientY,
-      caseItem,
-      touchDragRef.current.offsetX,
-      touchDragRef.current.offsetY
-    );
-
-    if (!pos) return;
-
-    setCases((prev) =>
-      prev.map((c) =>
-        c.id === caseItem.id
-          ? {
-              ...c,
-              x: pos.x,
-              y: pos.y,
-            }
-          : c
-      )
-    );
-  }
-
-  function handlePlacedCaseMouseDragEnd(caseItem) {
-    if (!touchDragRef.current.active || touchDragRef.current.caseId !== caseItem.id) return;
-    finishTouchDrag(caseItem.id);
   }
 
   function handlePlacedCaseTouchStart(e, caseItem) {
@@ -650,34 +680,12 @@ export default function App() {
     };
 
     setSelectedId(caseItem.id);
+    setDraggingCaseId(caseItem.id);
   }
 
   function finishTouchDrag(caseId) {
     const dragged = cases.find((c) => c.id === caseId);
-
-    if (dragged) {
-      const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
-
-      if (target) {
-        setCases((prev) =>
-          prev
-            .map((c) =>
-              c.id === target.id
-                ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
-                : c
-            )
-            .filter((c) => c.id !== caseId)
-        );
-        setSelectedId(target.id);
-      }
-    }
-
-    touchDragRef.current = {
-      active: false,
-      caseId: null,
-      offsetX: 0,
-      offsetY: 0,
-    };
+    finishCaseMove(caseId, dragged);
   }
 
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
@@ -882,9 +890,8 @@ export default function App() {
                   key={c.id}
                   draggable
                   onClick={() => setSelectedId(c.id)}
-                  onDragStart={(e) => handlePlacedCaseMouseDragStart(e, c)}
-                  onDrag={(e) => handlePlacedCaseMouseDrag(e, c)}
-                  onDragEnd={() => handlePlacedCaseMouseDragEnd(c)}
+                  onDragStart={() => handlePlacedCaseDragStart(c)}
+                  onDragEnd={handleDragEnd}
                   onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
                   onDoubleClick={() => {
                     if (!selectedTruck) return;
@@ -902,7 +909,7 @@ export default function App() {
                   }}
                   className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center ${
                     selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
-                  } cursor-move`}
+                  } ${draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'}`}
                   style={{
                     left: c.x * scale,
                     top: c.y * scale,
