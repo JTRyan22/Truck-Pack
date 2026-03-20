@@ -40,10 +40,13 @@ export default function App() {
     const rows = data ?? [];
     setTruckPresets(rows);
 
-    setSelectedTruckId((current) => {
-      if (current && rows.some((t) => t.id === current)) return current;
-      return rows[0]?.id ?? '';
-    });
+    if (rows.length > 0) {
+      setSelectedTruckId((current) =>
+        rows.some((t) => String(t.id) === String(current)) ? current : String(rows[0].id)
+      );
+    } else {
+      setSelectedTruckId('');
+    }
   }
 
   async function fetchTemplates() {
@@ -61,7 +64,9 @@ export default function App() {
   }
 
   const selectedTruck =
-    truckPresets.find((t) => t.id === selectedTruckId) || truckPresets[0] || null;
+    truckPresets.find((t) => String(t.id) === String(selectedTruckId)) ||
+    truckPresets[0] ||
+    null;
 
   const truck = selectedTruck
     ? {
@@ -401,7 +406,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="grid lg:grid-cols-[320px_1fr] gap-6 items-start">
+      <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
         <div className="space-y-4">
           <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
@@ -610,8 +615,11 @@ export default function App() {
             )}
           </div>
 
-          <div className="bg-slate-800 p-3 rounded">
-            <div className="flex items-center justify-between mb-2">
+          <div
+            className="bg-slate-800 p-3 rounded"
+            style={{ width: Math.max(truck.width * scale, 300) }}
+          >
+            <div className="flex items-center justify-between mb-2 gap-2">
               <h3 className="text-lg font-semibold">Case Selection</h3>
               <div className="flex gap-2">
                 <button
@@ -626,33 +634,35 @@ export default function App() {
               </div>
             </div>
 
-            {templates.map((t) => (
-              <div
-                key={t.id}
-                draggable
-                onDragStart={() => handleTemplateDragStart(t)}
-                onDragEnd={handleDragEnd}
-                className="relative p-2 mb-2 bg-slate-700 rounded cursor-grab"
-              >
-                <input
-                  value={t.name}
-                  onChange={(e) => renameTemplate(t.id, e.target.value)}
-                  className="w-full bg-slate-900 p-1 rounded mb-1"
-                />
-                <div className="text-sm text-slate-300">
-                  {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteTemplate(t.id);
-                  }}
-                  className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  draggable
+                  onDragStart={() => handleTemplateDragStart(t)}
+                  onDragEnd={handleDragEnd}
+                  className="relative p-2 bg-slate-700 rounded cursor-grab min-w-0"
                 >
-                  X
-                </button>
-              </div>
-            ))}
+                  <input
+                    value={t.name}
+                    onChange={(e) => renameTemplate(t.id, e.target.value)}
+                    className="w-full bg-slate-900 p-1 rounded mb-1"
+                  />
+                  <div className="text-sm text-slate-300">
+                    {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteTemplate(t.id);
+                    }}
+                    className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                  >
+                    X
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
