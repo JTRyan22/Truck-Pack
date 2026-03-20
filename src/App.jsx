@@ -42,7 +42,7 @@ export default function App() {
 
     if (rows.length > 0) {
       setSelectedTruckId((current) =>
-        rows.some((t) => String(t.id) === String(current)) ? current : String(rows[0].id)
+        rows.some((t) => String(t.id) === String(current)) ? String(current) : String(rows[0].id)
       );
     } else {
       setSelectedTruckId('');
@@ -76,6 +76,9 @@ export default function App() {
     : { width: 0, height: 0 };
 
   const scale = 14;
+  const truckPixelWidth = Math.max(truck.width * scale, 300);
+  const truckPixelHeight = Math.max(truck.height * scale, 300);
+
   const selectedCase = cases.find((c) => c.id === selectedId) ?? null;
 
   function clamp(value, min, max) {
@@ -406,8 +409,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="grid lg:grid-cols-[240px_1fr] gap-6 items-start">
-        <div className="space-y-4">
+      <div className="flex gap-6 items-start">
+        <div className="w-[240px] space-y-4 shrink-0">
           <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Truck Size</h3>
@@ -443,7 +446,7 @@ export default function App() {
           </div>
 
           <div className="bg-slate-800 p-3 rounded">
-            <h3 className="mb-2 text-lg font-semibold">Add Truck Size</h3>
+            <h3 className="mb-2 text-lg font-semibold">Add Truck</h3>
             <input
               placeholder="Truck Name"
               value={customTruckName}
@@ -463,7 +466,7 @@ export default function App() {
               className="w-full mb-2 p-2 bg-slate-900 rounded"
             />
             <button onClick={addTruckPreset} className="w-full bg-sky-700 p-2 rounded">
-              Add Truck
+              Add
             </button>
           </div>
 
@@ -539,122 +542,62 @@ export default function App() {
           )}
         </div>
 
-        <div className="space-y-4">
-          <div
-            ref={truckRef}
-            onDragOver={handleTruckDragOver}
-            onDrop={handleDrop}
-            className="relative border border-slate-500 bg-slate-950 overflow-auto rounded"
-            style={{
-              width: Math.max(truck.width * scale, 300),
-              height: Math.max(truck.height * scale, 300),
-              backgroundImage: `
-                linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
-              `,
-              backgroundSize: `${scale}px ${scale}px`,
-            }}
-          >
-            {displayedCases.map((c) => (
-              <div
-                key={c.id}
-                draggable
-                onClick={() => setSelectedId(c.id)}
-                onDragStart={() => handlePlacedCaseDragStart(c)}
-                onDragEnd={handleDragEnd}
-                onDoubleClick={() => {
-                  if (!selectedTruck) return;
-                  setCases((prev) =>
-                    prev.map((item) => {
-                      if (item.id !== c.id) return item;
-                      const rotated = { ...item, w: item.h, h: item.w };
-                      return {
-                        ...rotated,
-                        x: Math.min(rotated.x, truck.width - rotated.w),
-                        y: Math.min(rotated.y, truck.height - rotated.h),
-                      };
-                    })
-                  );
-                }}
-                className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center cursor-move ${
-                  selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
-                }`}
-                style={{
-                  left: c.x * scale,
-                  top: c.y * scale,
-                  width: c.w * scale,
-                  height: c.h * scale,
-                  zIndex: c.z,
-                }}
-              >
-                {c.name}
-                {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCases((prev) => prev.filter((item) => item.id !== c.id));
-                    if (selectedId === c.id) setSelectedId(null);
-                  }}
-                  className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
-                >
-                  X
-                </button>
-              </div>
-            ))}
-
-            {ghost && (
-              <div
-                className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
-                style={{
-                  left: ghost.x * scale,
-                  top: ghost.y * scale,
-                  width: ghost.w * scale,
-                  height: ghost.h * scale,
-                }}
-              />
-            )}
-          </div>
-
-          <div
-            className="bg-slate-800 p-3 rounded"
-            style={{ width: Math.max(truck.width * scale, 300) }}
-          >
-            <div className="flex items-center justify-between mb-2 gap-2">
-              <h3 className="text-lg font-semibold">Case Selection</h3>
-              <div className="flex gap-2">
-                <button
-                  onClick={fetchTemplates}
-                  className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
-                >
-                  Refresh
-                </button>
-                <button onClick={clearTruck} className="bg-rose-700 px-2 py-1 rounded text-sm">
-                  Clear Truck
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-              {templates.map((t) => (
+        <div className="shrink-0" style={{ width: truckPixelWidth }}>
+          <div className="space-y-4">
+            <div
+              ref={truckRef}
+              onDragOver={handleTruckDragOver}
+              onDrop={handleDrop}
+              className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
+              style={{
+                width: truckPixelWidth,
+                height: truckPixelHeight,
+                backgroundImage: `
+                  linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
+                  linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
+                `,
+                backgroundSize: `${scale}px ${scale}px`,
+              }}
+            >
+              {displayedCases.map((c) => (
                 <div
-                  key={t.id}
+                  key={c.id}
                   draggable
-                  onDragStart={() => handleTemplateDragStart(t)}
+                  onClick={() => setSelectedId(c.id)}
+                  onDragStart={() => handlePlacedCaseDragStart(c)}
                   onDragEnd={handleDragEnd}
-                  className="relative p-2 bg-slate-700 rounded cursor-grab min-w-0"
+                  onDoubleClick={() => {
+                    if (!selectedTruck) return;
+                    setCases((prev) =>
+                      prev.map((item) => {
+                        if (item.id !== c.id) return item;
+                        const rotated = { ...item, w: item.h, h: item.w };
+                        return {
+                          ...rotated,
+                          x: Math.min(rotated.x, truck.width - rotated.w),
+                          y: Math.min(rotated.y, truck.height - rotated.h),
+                        };
+                      })
+                    );
+                  }}
+                  className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center cursor-move ${
+                    selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
+                  }`}
+                  style={{
+                    left: c.x * scale,
+                    top: c.y * scale,
+                    width: c.w * scale,
+                    height: c.h * scale,
+                    zIndex: c.z,
+                  }}
                 >
-                  <input
-                    value={t.name}
-                    onChange={(e) => renameTemplate(t.id, e.target.value)}
-                    className="w-full bg-slate-900 p-1 rounded mb-1"
-                  />
-                  <div className="text-sm text-slate-300">
-                    {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
-                  </div>
+                  {c.name}
+                  {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      deleteTemplate(t.id);
+                      setCases((prev) => prev.filter((item) => item.id !== c.id));
+                      if (selectedId === c.id) setSelectedId(null);
                     }}
                     className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
                   >
@@ -662,6 +605,69 @@ export default function App() {
                   </button>
                 </div>
               ))}
+
+              {ghost && (
+                <div
+                  className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
+                  style={{
+                    left: ghost.x * scale,
+                    top: ghost.y * scale,
+                    width: ghost.w * scale,
+                    height: ghost.h * scale,
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
+              <div className="flex items-center justify-between mb-3 gap-2">
+                <h3 className="text-lg font-semibold">Case Selection</h3>
+                <div className="flex gap-2">
+                  <button
+                    onClick={fetchTemplates}
+                    className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={clearTruck}
+                    className="bg-rose-700 px-2 py-1 rounded text-sm"
+                  >
+                    Clear Truck
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {templates.map((t) => (
+                  <div
+                    key={t.id}
+                    draggable
+                    onDragStart={() => handleTemplateDragStart(t)}
+                    onDragEnd={handleDragEnd}
+                    className="relative p-2 bg-slate-700 rounded cursor-grab"
+                    style={{ width: '220px' }}
+                  >
+                    <input
+                      value={t.name}
+                      onChange={(e) => renameTemplate(t.id, e.target.value)}
+                      className="w-full bg-slate-900 p-1 rounded mb-1"
+                    />
+                    <div className="text-sm text-slate-300">
+                      {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteTemplate(t.id);
+                      }}
+                      className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                    >
+                      X
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
