@@ -96,7 +96,7 @@ export default function App() {
 
   const scale = 14;
   const truckPixelWidth = Math.max(truck.width * scale, 300);
-  const truckPixelHeight = Math.max(truck.height * scale, 300);
+  const truckPixelHeight = Math.max(truck.height * scale, 120);
 
   const selectedCase = cases.find((c) => c.id === selectedId) ?? null;
 
