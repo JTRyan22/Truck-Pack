@@ -25,9 +25,16 @@ export default function App() {
   const [selectedPackId, setSelectedPackId] = useState('');
   const [packName, setPackName] = useState('');
 
-  const touchDragRef = useRef({
+  const touchCaseDragRef = useRef({
     active: false,
     caseId: null,
+    offsetX: 0,
+    offsetY: 0,
+  });
+
+  const touchTemplateDragRef = useRef({
+    active: false,
+    template: null,
     offsetX: 0,
     offsetY: 0,
   });
@@ -40,41 +47,65 @@ export default function App() {
 
   useEffect(() => {
     function handleWindowTouchMove(e) {
-      if (!touchDragRef.current.active) return;
-      e.preventDefault();
-
-      const dragged = cases.find((c) => c.id === touchDragRef.current.caseId);
-      if (!dragged) return;
-
       const touch = e.touches[0];
       if (!touch) return;
 
-      const pos = getTruckPositionFromTopLeft(
-        touch.clientX,
-        touch.clientY,
-        dragged,
-        touchDragRef.current.offsetX,
-        touchDragRef.current.offsetY
-      );
+      if (touchCaseDragRef.current.active) {
+        e.preventDefault();
 
-      if (!pos) return;
+        const dragged = cases.find((c) => c.id === touchCaseDragRef.current.caseId);
+        if (!dragged) return;
 
-      setCases((prev) =>
-        prev.map((c) =>
-          c.id === dragged.id
-            ? {
-                ...c,
-                x: pos.x,
-                y: pos.y,
-              }
-            : c
-        )
-      );
+        const pos = getTruckPositionFromTopLeft(
+          touch.clientX,
+          touch.clientY,
+          dragged,
+          touchCaseDragRef.current.offsetX,
+          touchCaseDragRef.current.offsetY
+        );
+
+        if (!pos) return;
+
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === dragged.id
+              ? {
+                  ...c,
+                  x: pos.x,
+                  y: pos.y,
+                }
+              : c
+          )
+        );
+        return;
+      }
+
+      if (touchTemplateDragRef.current.active) {
+        e.preventDefault();
+
+        const template = touchTemplateDragRef.current.template;
+        if (!template || !selectedTruck) return;
+
+        const pos = getTruckPositionFromTopLeft(
+          touch.clientX,
+          touch.clientY,
+          template,
+          touchTemplateDragRef.current.offsetX,
+          touchTemplateDragRef.current.offsetY
+        );
+
+        setGhost(pos ? { ...template, stackCount: 1, ...pos } : null);
+      }
     }
 
     function handleWindowTouchEnd() {
-      if (!touchDragRef.current.active) return;
-      finishTouchDrag(touchDragRef.current.caseId);
+      if (touchCaseDragRef.current.active) {
+        finishTouchCaseDrag(touchCaseDragRef.current.caseId);
+      }
+
+      if (touchTemplateDragRef.current.active) {
+        finishTouchTemplateDrag();
+      }
     }
 
     window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
@@ -86,7 +117,7 @@ export default function App() {
       window.removeEventListener('touchend', handleWindowTouchEnd);
       window.removeEventListener('touchcancel', handleWindowTouchEnd);
     };
-  }, [cases]);
+  }, [cases, selectedTruckId]);
 
   function makeLocalCaseId() {
     return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -242,9 +273,15 @@ export default function App() {
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
-    touchDragRef.current = {
+    touchCaseDragRef.current = {
       active: false,
       caseId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+    touchTemplateDragRef.current = {
+      active: false,
+      template: null,
       offsetX: 0,
       offsetY: 0,
     };
@@ -567,12 +604,27 @@ export default function App() {
 
     setDraggingCaseId(null);
 
-    touchDragRef.current = {
+    touchCaseDragRef.current = {
       active: false,
       caseId: null,
       offsetX: 0,
       offsetY: 0,
     };
+  }
+
+  function finishTemplatePlacement(templateSnapshot, pos) {
+    if (!templateSnapshot || !pos) return;
+
+    const target = findStackTarget(templateSnapshot, pos);
+    if (target) {
+      updateCase(target.id, (c) => ({
+        ...c,
+        stackCount: (c.stackCount || 1) + 1,
+      }));
+      setSelectedId(target.id);
+    } else {
+      addCaseFromTemplate(templateSnapshot, pos.x, pos.y);
+    }
   }
 
   function handleTemplateDragStart(template) {
@@ -583,6 +635,57 @@ export default function App() {
     };
     setDraggingTemplate(dragTemplate);
     setDraggingCaseId(null);
+  }
+
+  function handleTemplateTouchStart(e, template) {
+    if (!selectedTruck) return;
+
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dragTemplate = {
+      ...template,
+      w: Number(template.length_in) / 6,
+      h: Number(template.width_in) / 6,
+    };
+
+    touchTemplateDragRef.current = {
+      active: true,
+      template: dragTemplate,
+      offsetX: touch.clientX - rect.left,
+      offsetY: touch.clientY - rect.top,
+    };
+
+    const pos = getTruckPositionFromTopLeft(
+      touch.clientX,
+      touch.clientY,
+      dragTemplate,
+      touchTemplateDragRef.current.offsetX,
+      touchTemplateDragRef.current.offsetY
+    );
+
+    setDraggingTemplate(dragTemplate);
+    setGhost(pos ? { ...dragTemplate, stackCount: 1, ...pos } : null);
+  }
+
+  function finishTouchTemplateDrag() {
+    const template = touchTemplateDragRef.current.template;
+    const currentGhost = ghost;
+
+    if (template && currentGhost) {
+      finishTemplatePlacement(template, { x: currentGhost.x, y: currentGhost.y });
+    }
+
+    touchTemplateDragRef.current = {
+      active: false,
+      template: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+
+    setDraggingTemplate(null);
+    setGhost(null);
   }
 
   function handlePlacedCaseDragStart(caseItem) {
@@ -619,16 +722,7 @@ export default function App() {
     if (draggingTemplate) {
       const pos = getTruckPosition(e.clientX, e.clientY, draggingTemplate);
       if (pos) {
-        const target = findStackTarget(draggingTemplate, pos);
-        if (target) {
-          updateCase(target.id, (c) => ({
-            ...c,
-            stackCount: (c.stackCount || 1) + 1,
-          }));
-          setSelectedId(target.id);
-        } else {
-          addCaseFromTemplate(draggingTemplate, pos.x, pos.y);
-        }
+        finishTemplatePlacement(draggingTemplate, pos);
       }
     }
 
@@ -676,7 +770,7 @@ export default function App() {
 
     const rect = e.currentTarget.getBoundingClientRect();
 
-    touchDragRef.current = {
+    touchCaseDragRef.current = {
       active: true,
       caseId: caseItem.id,
       offsetX: touch.clientX - rect.left,
@@ -687,7 +781,7 @@ export default function App() {
     setDraggingCaseId(caseItem.id);
   }
 
-  function finishTouchDrag(caseId) {
+  function finishTouchCaseDrag(caseId) {
     const dragged = cases.find((c) => c.id === caseId);
     finishCaseMove(caseId, dragged);
   }
@@ -980,8 +1074,14 @@ export default function App() {
                     draggable
                     onDragStart={() => handleTemplateDragStart(t)}
                     onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handleTemplateTouchStart(e, t)}
                     className="relative p-2 bg-slate-700 rounded cursor-grab"
-                    style={{ width: '220px' }}
+                    style={{
+                      width: '220px',
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                    }}
                   >
                     <input
                       value={t.name}
@@ -992,6 +1092,7 @@ export default function App() {
                       {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
                     </div>
                     <button
+                      onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteTemplate(t.id);
