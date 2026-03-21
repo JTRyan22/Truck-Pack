@@ -796,7 +796,7 @@ export default function App() {
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-hidden">
+    <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto">
       <div className="flex gap-6 items-start min-w-max">
         <div className="w-[240px] space-y-4 shrink-0">
           <div className="bg-slate-800 p-3 rounded">
