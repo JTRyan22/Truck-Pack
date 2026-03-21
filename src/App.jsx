@@ -796,8 +796,8 @@ export default function App() {
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white p-6">
-      <div className="flex gap-6 items-start">
+    <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-hidden">
+      <div className="flex gap-6 items-start min-w-max">
         <div className="w-[240px] space-y-4 shrink-0">
           <div className="bg-slate-800 p-3 rounded">
             <h3 className="text-lg font-semibold mb-2">Pack</h3>
@@ -928,12 +928,9 @@ export default function App() {
           <div className="bg-slate-800 p-3 rounded">
             <h3 className="mb-2 text-lg font-semibold">Instructions</h3>
             <div className="text-sm text-slate-300 space-y-1">
-              <p>1. Packs save layouts without overwriting each other.</p>
-              <p>2. Truck sizes and case templates sync through Supabase.</p>
-              <p>3. Add case types in inches.</p>
-              <p>4. Drag cases into the truck grid.</p>
-              <p>5. Drag a matching case onto the same spot to stack it.</p>
-              <p>6. Double-click a case in the truck to rotate it.</p>
+              <p>Drag cases into the truck grid.</p>
+              <p>Drag a matching case onto the same spot to stack it.</p>
+              <p>Double-click a case in the truck to rotate it.</p>
             </div>
           </div>
 
