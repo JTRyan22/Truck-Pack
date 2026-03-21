@@ -933,42 +933,7 @@ export default function App() {
               <p>Double-click a case in the truck to rotate it.</p>
             </div>
           </div>
-
-          {selectedCase && (
-            <div className="bg-slate-800 p-3 rounded space-y-2">
-              <h3 className="text-lg font-semibold">Selected Case</h3>
-              <input
-                value={selectedCase.name}
-                onChange={(e) => renameSelected(e.target.value)}
-                className="w-full bg-slate-900 p-1 rounded"
-              />
-              <div className="text-sm text-slate-400">
-                Stack qty: {selectedCase.stackCount || 1}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={rotateSelected}
-                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                >
-                  Rotate
-                </button>
-                <button
-                  onClick={duplicateSelected}
-                  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                >
-                  Duplicate
-                </button>
-                <button
-                  onClick={removeSelected}
-                  className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          )}
         </div>
-
         <div className="shrink-0" style={{ width: truckPixelWidth }}>
           <div className="space-y-4">
             <div
@@ -1052,64 +1017,43 @@ export default function App() {
               )}
             </div>
 
-            <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
-              <div className="flex items-center justify-between mb-3 gap-2">
-                <h3 className="text-lg font-semibold">Case Selection</h3>
-                <div className="flex gap-2">
+            $1
+
+            {selectedCase && (
+              <div className="bg-slate-800 p-3 rounded space-y-2" style={{ width: truckPixelWidth }}>
+                <h3 className="text-lg font-semibold">Selected Case</h3>
+                <input
+                  value={selectedCase.name}
+                  onChange={(e) => renameSelected(e.target.value)}
+                  className="w-full bg-slate-900 p-1 rounded"
+                />
+                <div className="text-sm text-slate-400">
+                  Stack qty: {selectedCase.stackCount || 1}
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={fetchTemplates}
-                    className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
+                    onClick={rotateSelected}
+                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
                   >
-                    Refresh
+                    Rotate
                   </button>
                   <button
-                    onClick={clearTruck}
-                    className="bg-rose-700 px-2 py-1 rounded text-sm"
+                    onClick={duplicateSelected}
+                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
                   >
-                    Clear Truck
+                    Duplicate
+                  </button>
+                  <button
+                    onClick={removeSelected}
+                    className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
-
-              <div className="flex flex-wrap gap-2">
-                {templates.map((t) => (
-                  <div
-                    key={t.id}
-                    draggable
-                    onDragStart={() => handleTemplateDragStart(t)}
-                    onDragEnd={handleDragEnd}
-                    onTouchStart={(e) => handleTemplateTouchStart(e, t)}
-                    className="relative p-2 bg-slate-700 rounded cursor-grab"
-                    style={{
-                      width: '220px',
-                      touchAction: 'none',
-                      userSelect: 'none',
-                      WebkitUserSelect: 'none',
-                    }}
-                  >
-                    <input
-                      value={t.name}
-                      onChange={(e) => renameTemplate(t.id, e.target.value)}
-                      className="w-full bg-slate-900 p-1 rounded mb-1"
-                    />
-                    <div className="text-sm text-slate-300">
-                      {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
-                    </div>
-                    <button
-                      onTouchStart={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteTemplate(t.id);
-                      }}
-                      className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
-                    >
-                      X
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
+        </div>
         </div>
       </div>
     </div>
