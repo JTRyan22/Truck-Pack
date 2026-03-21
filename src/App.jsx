@@ -37,6 +37,7 @@ export default function App() {
     template: null,
     offsetX: 0,
     offsetY: 0,
+    lastPos: null,
   });
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export default function App() {
         e.preventDefault();
 
         const template = touchTemplateDragRef.current.template;
-        if (!template || !selectedTruck) return;
+        if (!template) return;
 
         const pos = getTruckPositionFromTopLeft(
           touch.clientX,
@@ -94,6 +95,7 @@ export default function App() {
           touchTemplateDragRef.current.offsetY
         );
 
+        touchTemplateDragRef.current.lastPos = pos;
         setGhost(pos ? { ...template, stackCount: 1, ...pos } : null);
       }
     }
@@ -284,6 +286,7 @@ export default function App() {
       template: null,
       offsetX: 0,
       offsetY: 0,
+      lastPos: null,
     };
   }
 
@@ -650,20 +653,23 @@ export default function App() {
       h: Number(template.width_in) / 6,
     };
 
-    touchTemplateDragRef.current = {
-      active: true,
-      template: dragTemplate,
-      offsetX: touch.clientX - rect.left,
-      offsetY: touch.clientY - rect.top,
-    };
-
+    const offsetX = touch.clientX - rect.left;
+    const offsetY = touch.clientY - rect.top;
     const pos = getTruckPositionFromTopLeft(
       touch.clientX,
       touch.clientY,
       dragTemplate,
-      touchTemplateDragRef.current.offsetX,
-      touchTemplateDragRef.current.offsetY
+      offsetX,
+      offsetY
     );
+
+    touchTemplateDragRef.current = {
+      active: true,
+      template: dragTemplate,
+      offsetX,
+      offsetY,
+      lastPos: pos,
+    };
 
     setDraggingTemplate(dragTemplate);
     setGhost(pos ? { ...dragTemplate, stackCount: 1, ...pos } : null);
@@ -671,10 +677,10 @@ export default function App() {
 
   function finishTouchTemplateDrag() {
     const template = touchTemplateDragRef.current.template;
-    const currentGhost = ghost;
+    const pos = touchTemplateDragRef.current.lastPos;
 
-    if (template && currentGhost) {
-      finishTemplatePlacement(template, { x: currentGhost.x, y: currentGhost.y });
+    if (template && pos) {
+      finishTemplatePlacement(template, pos);
     }
 
     touchTemplateDragRef.current = {
@@ -682,6 +688,7 @@ export default function App() {
       template: null,
       offsetX: 0,
       offsetY: 0,
+      lastPos: null,
     };
 
     setDraggingTemplate(null);
