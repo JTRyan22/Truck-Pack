@@ -788,31 +788,31 @@ export default function App() {
   }
 
   function duplicateSelected() {
-    if (!hasSelection || !selectedTruck) return;
+  if (!hasSelection || !selectedTruck) return;
 
-    const before = snapshotState();
+  const before = snapshotState();
 
-const duplicated = selectedCases.map((item, index) => ({
-  ...item,
-  id: makeLocalCaseId(),
-  name: item.name,
-  x: clamp(item.x + 1 + index * 0.5, 0, truck.width - item.w),
-  y: clamp(item.y + 1 + index * 0.5, 0, truck.height - item.h),
-  z: 0,
-  stackCount: item.stackCount || 1,
-  color: item.color || DEFAULT_CASE_COLOR.value,
-  borderColor: item.borderColor || DEFAULT_CASE_COLOR.border,
-}));
+  const duplicated = selectedCases.map((item) => ({
+    ...item,
+    id: makeLocalCaseId(),
+    name: item.name,
+    x: clamp(item.x + 1, 0, truck.width - item.w),
+    y: clamp(item.y + 1, 0, truck.height - item.h),
+    z: 0,
+    stackCount: item.stackCount || 1,
+    color: item.color || DEFAULT_CASE_COLOR.value,
+    borderColor: item.borderColor || DEFAULT_CASE_COLOR.border,
+  }));
 
-    setCases((prev) => {
-      let zSeed = nextZ(prev);
-      const withZ = duplicated.map((item) => ({ ...item, z: zSeed++ }));
-      setSelectedIds(withZ.map((item) => item.id));
-      return [...prev, ...withZ];
-    });
+  setCases((prev) => {
+    let zSeed = nextZ(prev);
+    const withZ = duplicated.map((item) => ({ ...item, z: zSeed++ }));
+    setSelectedIds(withZ.map((item) => item.id));
+    return [...prev, ...withZ];
+  });
 
-    pushHistorySnapshot(before);
-  }
+  pushHistorySnapshot(before);
+}
 
   function removeSelected() {
     if (!hasSelection) return;
