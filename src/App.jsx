@@ -11,6 +11,7 @@ const CASE_COLORS = [
 ];
 
 const DEFAULT_CASE_COLOR = CASE_COLORS[0];
+const MAX_HISTORY = 100;
 
 export default function App() {
   const [truckPresets, setTruckPresets] = useState([]);
@@ -26,9 +27,21 @@ export default function App() {
   const [ghost, setGhost] = useState(null);
   const [selectionBox, setSelectionBox] = useState(null);
 
+  const [historyPast, setHistoryPast] = useState([]);
+  const [historyFuture, setHistoryFuture] = useState([]);
+  const [clipboard, setClipboard] = useState(null);
+
   const truckRef = useRef(null);
   const justFinishedBoxSelectRef = useRef(false);
   const transparentDragImageRef = useRef(null);
+  const dragStartSnapshotRef = useRef(null);
+
+  const casesRef = useRef(cases);
+  const selectedIdsRef = useRef(selectedIds);
+  const historyPastRef = useRef(historyPast);
+  const historyFutureRef = useRef(historyFuture);
+  const clipboardRef = useRef(clipboard);
+
   const groupDragRef = useRef({
     active: false,
     anchorId: null,
@@ -72,6 +85,26 @@ export default function App() {
   });
 
   useEffect(() => {
+    casesRef.current = cases;
+  }, [cases]);
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds;
+  }, [selectedIds]);
+
+  useEffect(() => {
+    historyPastRef.current = historyPast;
+  }, [historyPast]);
+
+  useEffect(() => {
+    historyFutureRef.current = historyFuture;
+  }, [historyFuture]);
+
+  useEffect(() => {
+    clipboardRef.current = clipboard;
+  }, [clipboard]);
+
+  useEffect(() => {
     const img = new Image();
     img.src =
       'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
@@ -91,6 +124,205 @@ export default function App() {
   function snapHalf(value) {
     return Math.round(value * 2) / 2;
   }
+
+  function deepClone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function snapshotState() {
+    return {
+      cases: deepClone(casesRef.current),
+      selectedIds: [...selectedIdsRef.current],
+    };
+  }
+
+  function snapshotsEqual(a, b) {
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  function pushHistorySnapshot(beforeSnapshot) {
+    setHistoryPast((prev) => {
+      const next = [...prev, deepClone(beforeSnapshot)];
+      return next.length > MAX_HISTORY ? next.slice(next.length - MAX_HISTORY) : next;
+    });
+    setHistoryFuture([]);
+  }
+
+  function applySnapshot(snapshot) {
+    setCases(deepClone(snapshot.cases));
+    setSelectedIds([...snapshot.selectedIds]);
+    setDraggingTemplate(null);
+    setDraggingCaseId(null);
+    setGhost(null);
+    setSelectionBox(null);
+
+    groupDragRef.current = {
+      active: false,
+      anchorId: null,
+      startX: 0,
+      startY: 0,
+      bounds: null,
+      itemPositions: [],
+    };
+  }
+
+  function undo() {
+    const past = historyPastRef.current;
+    if (past.length === 0) return;
+
+    const current = snapshotState();
+    const previous = deepClone(past[past.length - 1]);
+
+    setHistoryPast((prev) => prev.slice(0, -1));
+    setHistoryFuture((prev) => [current, ...prev]);
+    applySnapshot(previous);
+  }
+
+  function redo() {
+    const future = historyFutureRef.current;
+    if (future.length === 0) return;
+
+    const current = snapshotState();
+    const next = deepClone(future[0]);
+
+    setHistoryPast((prev) => {
+      const updated = [...prev, current];
+      return updated.length > MAX_HISTORY
+        ? updated.slice(updated.length - MAX_HISTORY)
+        : updated;
+    });
+    setHistoryFuture((prev) => prev.slice(1));
+    applySnapshot(next);
+  }
+
+  function copySelection() {
+    const currentSelectedCases = casesRef.current.filter((c) =>
+      selectedIdsRef.current.includes(c.id)
+    );
+    if (currentSelectedCases.length === 0) return;
+
+    const minX = Math.min(...currentSelectedCases.map((c) => c.x));
+    const minY = Math.min(...currentSelectedCases.map((c) => c.y));
+
+    setClipboard({
+      items: currentSelectedCases.map((c) => ({
+        templateId: c.templateId || null,
+        name: c.name,
+        w: c.w,
+        h: c.h,
+        z: c.z || 0,
+        stackCount: c.stackCount || 1,
+        color: c.color || DEFAULT_CASE_COLOR.value,
+        borderColor: c.borderColor || DEFAULT_CASE_COLOR.border,
+        relX: c.x - minX,
+        relY: c.y - minY,
+      })),
+      width:
+        Math.max(...currentSelectedCases.map((c) => c.x + c.w)) - minX,
+      height:
+        Math.max(...currentSelectedCases.map((c) => c.y + c.h)) - minY,
+    });
+  }
+
+  function pasteClipboard() {
+    const currentClipboard = clipboardRef.current;
+    if (!selectedTruck || !currentClipboard || currentClipboard.items.length === 0) return;
+
+    const before = snapshotState();
+
+    let baseX = 1;
+    let baseY = 1;
+
+    if (selectedIdsRef.current.length > 0) {
+      const selectedCasesNow = casesRef.current.filter((c) =>
+        selectedIdsRef.current.includes(c.id)
+      );
+      if (selectedCasesNow.length > 0) {
+        const minX = Math.min(...selectedCasesNow.map((c) => c.x));
+        const minY = Math.min(...selectedCasesNow.map((c) => c.y));
+        baseX = minX + 1;
+        baseY = minY + 1;
+      }
+    }
+
+    baseX = clamp(baseX, 0, Math.max(0, truck.width - currentClipboard.width));
+    baseY = clamp(baseY, 0, Math.max(0, truck.height - currentClipboard.height));
+    baseX = snapHalf(baseX);
+    baseY = snapHalf(baseY);
+
+    const newItems = currentClipboard.items.map((item, index) => ({
+      id: makeLocalCaseId(),
+      templateId: item.templateId,
+      name: item.name,
+      w: item.w,
+      h: item.h,
+      x: snapHalf(clamp(baseX + item.relX, 0, truck.width - item.w)),
+      y: snapHalf(clamp(baseY + item.relY, 0, truck.height - item.h)),
+      z: index + 1,
+      stackCount: item.stackCount || 1,
+      color: item.color || DEFAULT_CASE_COLOR.value,
+      borderColor: item.borderColor || DEFAULT_CASE_COLOR.border,
+    }));
+
+    setCases((prev) => {
+      let zSeed = nextZ(prev);
+      const withZ = newItems.map((item) => ({ ...item, z: zSeed++ }));
+      setSelectedIds(withZ.map((item) => item.id));
+      return [...prev, ...withZ];
+    });
+
+    pushHistorySnapshot(before);
+  }
+
+  function shouldIgnoreShortcutTarget(target) {
+    if (!target) return false;
+    const tag = target.tagName;
+    return (
+      tag === 'INPUT' ||
+      tag === 'TEXTAREA' ||
+      tag === 'SELECT' ||
+      target.isContentEditable
+    );
+  }
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (shouldIgnoreShortcutTarget(e.target)) return;
+
+      const isMod = e.ctrlKey || e.metaKey;
+      if (!isMod) return;
+
+      const key = e.key.toLowerCase();
+
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
+      if (key === 'z' && e.shiftKey) {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      if (key === 'c') {
+        if (selectedIdsRef.current.length === 0) return;
+        e.preventDefault();
+        copySelection();
+        return;
+      }
+
+      if (key === 'v') {
+        if (!clipboardRef.current) return;
+        e.preventDefault();
+        pasteClipboard();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedTruckId, truckPresets, clipboard]);
 
   const selectedTruck =
     truckPresets.find((t) => String(t.id) === String(selectedTruckId)) ||
@@ -126,7 +358,7 @@ export default function App() {
       if (touchCaseDragRef.current.active) {
         e.preventDefault();
 
-        const dragged = cases.find((c) => c.id === touchCaseDragRef.current.caseId);
+        const dragged = casesRef.current.find((c) => c.id === touchCaseDragRef.current.caseId);
         if (!dragged) return;
 
         const pos = getTruckPositionFromTopLeft(
@@ -204,7 +436,7 @@ export default function App() {
       window.removeEventListener('touchend', handleWindowTouchEnd);
       window.removeEventListener('touchcancel', handleWindowTouchEnd);
     };
-  }, [cases, selectedTruckId]);
+  }, [clipboard, selectedTruckId, truckPresets]);
 
   useEffect(() => {
     function handleWindowMouseMove(e) {
@@ -252,7 +484,7 @@ export default function App() {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [cases, selectedTruckId, truckPresets]);
+  }, []);
 
   async function fetchTruckPresets() {
     const { data, error } = await supabase
@@ -344,7 +576,7 @@ export default function App() {
   function getIdsInsideSelectionBox(box) {
     if (!box) return [];
 
-    return cases
+    return casesRef.current
       .filter((c) => {
         const left = c.x * scale;
         const top = c.y * scale;
@@ -368,7 +600,7 @@ export default function App() {
   }
 
   function beginGroupDrag(anchorCase) {
-    const groupItems = cases.filter((c) => selectedIds.includes(c.id));
+    const groupItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
     if (groupItems.length <= 1) {
       groupDragRef.current = {
         active: false,
@@ -445,6 +677,8 @@ export default function App() {
   function rotateSelected() {
     if (!hasSelection || !selectedTruck) return;
 
+    const before = snapshotState();
+
     if (selectedIds.length === 1) {
       setCases((prev) =>
         prev.map((c) => {
@@ -458,10 +692,11 @@ export default function App() {
           };
         })
       );
+      pushHistorySnapshot(before);
       return;
     }
 
-    const groupItems = cases.filter((c) => selectedIds.includes(c.id));
+    const groupItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
     if (groupItems.length <= 1) return;
 
     const minX = Math.min(...groupItems.map((c) => c.x));
@@ -512,6 +747,7 @@ export default function App() {
     );
 
     setCases((prev) => prev.map((c) => (rotatedMap.has(c.id) ? rotatedMap.get(c.id) : c)));
+    pushHistorySnapshot(before);
   }
 
   async function renameTemplate(templateId, newNameValue) {
@@ -534,21 +770,27 @@ export default function App() {
 
   function renameSelected(newNameValue) {
     if (!selectedCase) return;
+    const before = snapshotState();
     updateCase(selectedCase.id, (c) => ({ ...c, name: newNameValue }));
+    pushHistorySnapshot(before);
   }
 
   function recolorSelected(colorValue) {
     if (!hasSelection) return;
+    const before = snapshotState();
     const nextColor = CASE_COLORS.find((color) => color.value === colorValue) || DEFAULT_CASE_COLOR;
     updateSelectedCases((c) => ({
       ...c,
       color: nextColor.value,
       borderColor: nextColor.border,
     }));
+    pushHistorySnapshot(before);
   }
 
   function duplicateSelected() {
     if (!hasSelection || !selectedTruck) return;
+
+    const before = snapshotState();
 
     const duplicated = selectedCases.map((item, index) => ({
       ...item,
@@ -568,15 +810,22 @@ export default function App() {
       setSelectedIds(withZ.map((item) => item.id));
       return [...prev, ...withZ];
     });
+
+    pushHistorySnapshot(before);
   }
 
   function removeSelected() {
     if (!hasSelection) return;
+    const before = snapshotState();
     setCases((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
     setSelectedIds([]);
+    pushHistorySnapshot(before);
   }
 
   function clearTruck() {
+    if (casesRef.current.length === 0 && selectedIdsRef.current.length === 0) return;
+    const before = snapshotState();
+
     setCases([]);
     setSelectedIds([]);
     setDraggingTemplate(null);
@@ -615,6 +864,8 @@ export default function App() {
       bounds: null,
       itemPositions: [],
     };
+
+    pushHistorySnapshot(before);
   }
 
   function newPack() {
@@ -668,6 +919,11 @@ export default function App() {
     );
     setSelectedIds([]);
     setSelectionBox(null);
+    setDraggingTemplate(null);
+    setDraggingCaseId(null);
+    setGhost(null);
+    setHistoryPast([]);
+    setHistoryFuture([]);
   }
 
   async function savePack(saveAsNew = false) {
@@ -750,7 +1006,12 @@ export default function App() {
       return;
     }
 
-    newPack();
+    setSelectedPackId('');
+    setPackName('');
+    setCases([]);
+    setSelectedIds([]);
+    setHistoryPast([]);
+    setHistoryFuture([]);
     fetchPacks();
   }
 
@@ -908,7 +1169,7 @@ export default function App() {
 
   function findStackTarget(item, pos, ignoreId = null) {
     return (
-      cases.find((c) => {
+      casesRef.current.find((c) => {
         if (ignoreId && c.id === ignoreId) return false;
         return (
           c.name === item.name &&
@@ -920,7 +1181,7 @@ export default function App() {
   }
 
   function finishCaseMove(caseId, caseSnapshot = null) {
-    const dragged = caseSnapshot || cases.find((c) => c.id === caseId);
+    const dragged = caseSnapshot || casesRef.current.find((c) => c.id === caseId);
 
     if (dragged) {
       const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
@@ -961,6 +1222,8 @@ export default function App() {
   function finishTemplatePlacement(templateSnapshot, pos) {
     if (!templateSnapshot || !pos) return;
 
+    const before = snapshotState();
+
     const target = findStackTarget(templateSnapshot, pos);
     if (target) {
       updateCase(target.id, (c) => ({
@@ -971,6 +1234,8 @@ export default function App() {
     } else {
       addCaseFromTemplate(templateSnapshot, pos.x, pos.y);
     }
+
+    pushHistorySnapshot(before);
   }
 
   function handleTemplateDragStart(event, template) {
@@ -1042,13 +1307,14 @@ export default function App() {
 
   function handlePlacedCaseDragStart(event, caseItem) {
     setTransparentDragImage(event);
+    dragStartSnapshotRef.current = snapshotState();
 
     setDraggingCaseId(caseItem.id);
     setDraggingTemplate(null);
 
-    const shouldGroupDrag = selectedIds.includes(caseItem.id) && selectedIds.length > 1;
+    const shouldGroupDrag = selectedIdsRef.current.includes(caseItem.id) && selectedIdsRef.current.length > 1;
 
-    if (!selectedIds.includes(caseItem.id)) {
+    if (!selectedIdsRef.current.includes(caseItem.id)) {
       setSelectedIds([caseItem.id]);
     }
 
@@ -1079,7 +1345,7 @@ export default function App() {
     }
 
     if (draggingCaseId !== null) {
-      const draggedCase = cases.find((c) => c.id === draggingCaseId);
+      const draggedCase = casesRef.current.find((c) => c.id === draggingCaseId);
       if (!draggedCase) return;
 
       if (groupDragRef.current.active) {
@@ -1117,11 +1383,12 @@ export default function App() {
     }
 
     if (draggingCaseId !== null) {
-      const dragged = cases.find((c) => c.id === draggingCaseId);
+      const dragged = casesRef.current.find((c) => c.id === draggingCaseId);
       const pos = getTruckPosition(e.clientX, e.clientY, dragged);
 
       if (dragged && pos) {
         if (!groupDragRef.current.active) {
+          const before = dragStartSnapshotRef.current || snapshotState();
           const updated = { ...dragged, x: pos.x, y: pos.y };
           const target = findStackTarget(updated, pos, draggingCaseId);
 
@@ -1139,16 +1406,28 @@ export default function App() {
           } else {
             updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
           }
+
+          const after = snapshotState();
+          if (!snapshotsEqual(before, after)) {
+            pushHistorySnapshot(before);
+          }
+        } else if (dragStartSnapshotRef.current) {
+          const after = snapshotState();
+          if (!snapshotsEqual(dragStartSnapshotRef.current, after)) {
+            pushHistorySnapshot(dragStartSnapshotRef.current);
+          }
         }
       }
     }
 
+    dragStartSnapshotRef.current = null;
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
   }
 
   function handleDragEnd() {
+    dragStartSnapshotRef.current = null;
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
@@ -1166,6 +1445,8 @@ export default function App() {
   function handlePlacedCaseTouchStart(e, caseItem) {
     if (!selectedTruck) return;
 
+    dragStartSnapshotRef.current = snapshotState();
+
     const touch = e.touches[0];
     if (!touch) return;
 
@@ -1178,9 +1459,9 @@ export default function App() {
       offsetY: touch.clientY - rect.top,
     };
 
-    const shouldGroupDrag = selectedIds.includes(caseItem.id) && selectedIds.length > 1;
+    const shouldGroupDrag = selectedIdsRef.current.includes(caseItem.id) && selectedIdsRef.current.length > 1;
 
-    if (!selectedIds.includes(caseItem.id)) {
+    if (!selectedIdsRef.current.includes(caseItem.id)) {
       setSelectedIds([caseItem.id]);
     }
 
@@ -1201,8 +1482,18 @@ export default function App() {
   }
 
   function finishTouchCaseDrag(caseId) {
-    const dragged = cases.find((c) => c.id === caseId);
+    const before = dragStartSnapshotRef.current;
+    const dragged = casesRef.current.find((c) => c.id === caseId);
     finishCaseMove(caseId, dragged);
+
+    if (before) {
+      const after = snapshotState();
+      if (!snapshotsEqual(before, after)) {
+        pushHistorySnapshot(before);
+      }
+    }
+
+    dragStartSnapshotRef.current = null;
   }
 
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
@@ -1250,6 +1541,43 @@ export default function App() {
               <button onClick={deletePack} className="bg-rose-700 p-2 rounded">
                 Delete
               </button>
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-3 rounded">
+            <h3 className="text-lg font-semibold mb-2">Edit</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={undo}
+                disabled={historyPast.length === 0}
+                className={`p-2 rounded ${historyPast.length === 0 ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
+              >
+                Undo
+              </button>
+              <button
+                onClick={redo}
+                disabled={historyFuture.length === 0}
+                className={`p-2 rounded ${historyFuture.length === 0 ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
+              >
+                Redo
+              </button>
+              <button
+                onClick={copySelection}
+                disabled={!hasSelection}
+                className={`p-2 rounded ${!hasSelection ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
+              >
+                Copy
+              </button>
+              <button
+                onClick={pasteClipboard}
+                disabled={!clipboard || !selectedTruck}
+                className={`p-2 rounded ${!clipboard || !selectedTruck ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
+              >
+                Paste
+              </button>
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+C, Ctrl/Cmd+V
             </div>
           </div>
 
@@ -1446,8 +1774,10 @@ export default function App() {
                       onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
+                        const before = snapshotState();
                         setCases((prev) => prev.filter((item) => item.id !== c.id));
                         setSelectedIds((prev) => prev.filter((id) => id !== c.id));
+                        pushHistorySnapshot(before);
                       }}
                       className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
                     >
@@ -1599,6 +1929,21 @@ export default function App() {
                     className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
                   >
                     Duplicate
+                  </button>
+                  <button
+                    onClick={copySelection}
+                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                  >
+                    Copy
+                  </button>
+                  <button
+                    onClick={pasteClipboard}
+                    className={`rounded px-2 py-1 ${
+                      !clipboard ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700 hover:bg-slate-600'
+                    }`}
+                    disabled={!clipboard}
+                  >
+                    Paste
                   </button>
                   <button
                     onClick={() => setSelectedIds([])}
