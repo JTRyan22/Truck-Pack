@@ -20,11 +20,14 @@ export default function App() {
   const [customTruckWidth, setCustomTruckWidth] = useState('');
 
   const [cases, setCases] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
   const [draggingTemplate, setDraggingTemplate] = useState(null);
   const [draggingCaseId, setDraggingCaseId] = useState(null);
   const [ghost, setGhost] = useState(null);
+  const [selectionBox, setSelectionBox] = useState(null);
+
   const truckRef = useRef(null);
+  const justFinishedBoxSelectRef = useRef(false);
 
   const [templates, setTemplates] = useState([]);
 
@@ -50,6 +53,42 @@ export default function App() {
     offsetY: 0,
     lastPos: null,
   });
+
+  const selectionDragRef = useRef({
+    active: false,
+    startX: 0,
+    startY: 0,
+    additive: false,
+    baseSelection: [],
+  });
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function snapHalf(value) {
+    return Math.round(value * 2) / 2;
+  }
+
+  const selectedTruck =
+    truckPresets.find((t) => String(t.id) === String(selectedTruckId)) ||
+    truckPresets[0] ||
+    null;
+
+  const truck = selectedTruck
+    ? {
+        width: (Number(selectedTruck.length_ft) * 12) / 6,
+        height: (Number(selectedTruck.width_ft) * 12) / 6,
+      }
+    : { width: 0, height: 0 };
+
+  const scale = 14;
+  const truckPixelWidth = Math.max(truck.width * scale, 300);
+  const truckPixelHeight = Math.max(truck.height * scale, 120);
+
+  const selectedCases = cases.filter((c) => selectedIds.includes(c.id));
+  const selectedCase = selectedCases.length === 1 ? selectedCases[0] : null;
+  const hasSelection = selectedCases.length > 0;
 
   useEffect(() => {
     fetchTruckPresets();
@@ -132,9 +171,53 @@ export default function App() {
     };
   }, [cases, selectedTruckId]);
 
-  function makeLocalCaseId() {
-    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  }
+  useEffect(() => {
+    function handleWindowMouseMove(e) {
+      if (!selectionDragRef.current.active || !truckRef.current) return;
+
+      const rect = truckRef.current.getBoundingClientRect();
+      const currentX = clamp(e.clientX - rect.left, 0, rect.width);
+      const currentY = clamp(e.clientY - rect.top, 0, rect.height);
+
+      const nextBox = buildSelectionBox(
+        selectionDragRef.current.startX,
+        selectionDragRef.current.startY,
+        currentX,
+        currentY
+      );
+
+      setSelectionBox(nextBox);
+      applySelectionFromBox(nextBox);
+    }
+
+    function handleWindowMouseUp() {
+      if (!selectionDragRef.current.active) return;
+
+      justFinishedBoxSelectRef.current = true;
+
+      selectionDragRef.current = {
+        active: false,
+        startX: 0,
+        startY: 0,
+        additive: false,
+        baseSelection: [],
+      };
+
+      setSelectionBox(null);
+
+      setTimeout(() => {
+        justFinishedBoxSelectRef.current = false;
+      }, 0);
+    }
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [cases, selectedTruckId, truckPresets]);
 
   async function fetchTruckPresets() {
     const { data, error } = await supabase
@@ -187,30 +270,8 @@ export default function App() {
     setPacks(data ?? []);
   }
 
-  const selectedTruck =
-    truckPresets.find((t) => String(t.id) === String(selectedTruckId)) ||
-    truckPresets[0] ||
-    null;
-
-  const truck = selectedTruck
-    ? {
-        width: (Number(selectedTruck.length_ft) * 12) / 6,
-        height: (Number(selectedTruck.width_ft) * 12) / 6,
-      }
-    : { width: 0, height: 0 };
-
-  const scale = 14;
-  const truckPixelWidth = Math.max(truck.width * scale, 300);
-  const truckPixelHeight = Math.max(truck.height * scale, 120);
-
-  const selectedCase = cases.find((c) => c.id === selectedId) ?? null;
-
-  function clamp(value, min, max) {
-    return Math.min(Math.max(value, min), max);
-  }
-
-  function snapHalf(value) {
-    return Math.round(value * 2) / 2;
+  function makeLocalCaseId() {
+    return `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
   function nextZ(prevCases) {
@@ -219,6 +280,56 @@ export default function App() {
 
   function updateCase(id, updater) {
     setCases((prev) => prev.map((c) => (c.id === id ? updater(c) : c)));
+  }
+
+  function updateSelectedCases(updater) {
+    setCases((prev) => prev.map((c) => (selectedIds.includes(c.id) ? updater(c) : c)));
+  }
+
+  function handleCaseSelection(caseId, multiSelect = false) {
+    setSelectedIds((prev) => {
+      if (multiSelect) {
+        return prev.includes(caseId) ? prev.filter((id) => id !== caseId) : [...prev, caseId];
+      }
+      return [caseId];
+    });
+  }
+
+  function buildSelectionBox(startX, startY, currentX, currentY) {
+    return {
+      left: Math.min(startX, currentX),
+      top: Math.min(startY, currentY),
+      width: Math.abs(currentX - startX),
+      height: Math.abs(currentY - startY),
+      right: Math.max(startX, currentX),
+      bottom: Math.max(startY, currentY),
+    };
+  }
+
+  function getIdsInsideSelectionBox(box) {
+    if (!box) return [];
+
+    return cases
+      .filter((c) => {
+        const left = c.x * scale;
+        const top = c.y * scale;
+        const right = left + c.w * scale;
+        const bottom = top + c.h * scale;
+
+        return !(right < box.left || left > box.right || bottom < box.top || top > box.bottom);
+      })
+      .map((c) => c.id);
+  }
+
+  function applySelectionFromBox(box) {
+    const hitIds = getIdsInsideSelectionBox(box);
+
+    if (selectionDragRef.current.additive) {
+      setSelectedIds(Array.from(new Set([...selectionDragRef.current.baseSelection, ...hitIds])));
+      return;
+    }
+
+    setSelectedIds(hitIds);
   }
 
   async function renameTemplate(templateId, newNameValue) {
@@ -245,9 +356,9 @@ export default function App() {
   }
 
   function recolorSelected(colorValue) {
-    if (!selectedCase) return;
+    if (!hasSelection) return;
     const nextColor = CASE_COLORS.find((color) => color.value === colorValue) || DEFAULT_CASE_COLOR;
-    updateCase(selectedCase.id, (c) => ({
+    updateSelectedCases((c) => ({
       ...c,
       color: nextColor.value,
       borderColor: nextColor.border,
@@ -255,61 +366,80 @@ export default function App() {
   }
 
   function rotateSelected() {
-    if (!selectedCase || !selectedTruck) return;
-    updateCase(selectedCase.id, (c) => {
-      const rotated = { ...c, w: c.h, h: c.w };
-      return {
-        ...rotated,
-        x: clamp(rotated.x, 0, truck.width - rotated.w),
-        y: clamp(rotated.y, 0, truck.height - rotated.h),
-      };
-    });
+    if (!hasSelection || !selectedTruck) return;
+
+    setCases((prev) =>
+      prev.map((c) => {
+        if (!selectedIds.includes(c.id)) return c;
+
+        const rotated = { ...c, w: c.h, h: c.w };
+        return {
+          ...rotated,
+          x: clamp(rotated.x, 0, truck.width - rotated.w),
+          y: clamp(rotated.y, 0, truck.height - rotated.h),
+        };
+      })
+    );
   }
 
   function duplicateSelected() {
-    if (!selectedCase || !selectedTruck) return;
-    const newId = makeLocalCaseId();
-    setCases((prev) => [
-      ...prev,
-      {
-        ...selectedCase,
-        id: newId,
-        name: `${selectedCase.name} copy`,
-        x: clamp(selectedCase.x + 1, 0, truck.width - selectedCase.w),
-        y: clamp(selectedCase.y + 1, 0, truck.height - selectedCase.h),
-        z: nextZ(prev),
-        stackCount: selectedCase.stackCount || 1,
-        color: selectedCase.color || DEFAULT_CASE_COLOR.value,
-        borderColor: selectedCase.borderColor || DEFAULT_CASE_COLOR.border,
-      },
-    ]);
-    setSelectedId(newId);
+    if (!hasSelection || !selectedTruck) return;
+
+    const duplicated = selectedCases.map((item, index) => ({
+      ...item,
+      id: makeLocalCaseId(),
+      name: `${item.name} copy`,
+      x: clamp(item.x + 1 + index * 0.5, 0, truck.width - item.w),
+      y: clamp(item.y + 1 + index * 0.5, 0, truck.height - item.h),
+      z: 0,
+      stackCount: item.stackCount || 1,
+      color: item.color || DEFAULT_CASE_COLOR.value,
+      borderColor: item.borderColor || DEFAULT_CASE_COLOR.border,
+    }));
+
+    setCases((prev) => {
+      let zSeed = nextZ(prev);
+      const withZ = duplicated.map((item) => ({ ...item, z: zSeed++ }));
+      setSelectedIds(withZ.map((item) => item.id));
+      return [...prev, ...withZ];
+    });
   }
 
   function removeSelected() {
-    if (!selectedCase) return;
-    setCases((prev) => prev.filter((c) => c.id !== selectedCase.id));
-    setSelectedId(null);
+    if (!hasSelection) return;
+    setCases((prev) => prev.filter((c) => !selectedIds.includes(c.id)));
+    setSelectedIds([]);
   }
 
   function clearTruck() {
     setCases([]);
-    setSelectedId(null);
+    setSelectedIds([]);
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
+    setSelectionBox(null);
+
     touchCaseDragRef.current = {
       active: false,
       caseId: null,
       offsetX: 0,
       offsetY: 0,
     };
+
     touchTemplateDragRef.current = {
       active: false,
       template: null,
       offsetX: 0,
       offsetY: 0,
       lastPos: null,
+    };
+
+    selectionDragRef.current = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      additive: false,
+      baseSelection: [],
     };
   }
 
@@ -362,7 +492,8 @@ export default function App() {
         borderColor: c.border_color || DEFAULT_CASE_COLOR.border,
       }))
     );
-    setSelectedId(null);
+    setSelectedIds([]);
+    setSelectionBox(null);
   }
 
   async function savePack(saveAsNew = false) {
@@ -572,7 +703,7 @@ export default function App() {
         borderColor: DEFAULT_CASE_COLOR.border,
       },
     ]);
-    setSelectedId(newId);
+    setSelectedIds([newId]);
   }
 
   function getTruckPosition(clientX, clientY, item) {
@@ -630,7 +761,7 @@ export default function App() {
             )
             .filter((c) => c.id !== caseId)
         );
-        setSelectedId(target.id);
+        setSelectedIds([target.id]);
       }
     }
 
@@ -653,7 +784,7 @@ export default function App() {
         ...c,
         stackCount: (c.stackCount || 1) + 1,
       }));
-      setSelectedId(target.id);
+      setSelectedIds([target.id]);
     } else {
       addCaseFromTemplate(templateSnapshot, pos.x, pos.y);
     }
@@ -727,7 +858,9 @@ export default function App() {
   function handlePlacedCaseDragStart(caseItem) {
     setDraggingCaseId(caseItem.id);
     setDraggingTemplate(null);
-    setSelectedId(caseItem.id);
+    if (!selectedIds.includes(caseItem.id)) {
+      setSelectedIds([caseItem.id]);
+    }
     setGhost({ ...caseItem });
   }
 
@@ -780,7 +913,7 @@ export default function App() {
               )
               .filter((c) => c.id !== draggingCaseId)
           );
-          setSelectedId(target.id);
+          setSelectedIds([target.id]);
         } else {
           updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
         }
@@ -813,7 +946,7 @@ export default function App() {
       offsetY: touch.clientY - rect.top,
     };
 
-    setSelectedId(caseItem.id);
+    setSelectedIds([caseItem.id]);
     setDraggingCaseId(caseItem.id);
   }
 
@@ -960,6 +1093,8 @@ export default function App() {
               <p>Drag cases into the truck grid.</p>
               <p>Drag a matching case onto the same spot to stack it.</p>
               <p>Double-click a case in the truck to rotate it.</p>
+              <p>Ctrl-click or Cmd-click cases to multi-select.</p>
+              <p>Drag on empty truck space to box-select cases.</p>
             </div>
           </div>
         </div>
@@ -968,6 +1103,40 @@ export default function App() {
           <div className="space-y-4">
             <div
               ref={truckRef}
+              onMouseDown={(e) => {
+                if (e.target !== e.currentTarget || draggingCaseId !== null || draggingTemplate) {
+                  return;
+                }
+
+                const rect = truckRef.current?.getBoundingClientRect();
+                if (!rect) return;
+
+                const startX = clamp(e.clientX - rect.left, 0, rect.width);
+                const startY = clamp(e.clientY - rect.top, 0, rect.height);
+                const additive = e.ctrlKey || e.metaKey;
+
+                selectionDragRef.current = {
+                  active: true,
+                  startX,
+                  startY,
+                  additive,
+                  baseSelection: additive ? [...selectedIds] : [],
+                };
+
+                const initialBox = buildSelectionBox(startX, startY, startX, startY);
+                setSelectionBox(initialBox);
+
+                if (!additive) {
+                  setSelectedIds([]);
+                }
+              }}
+              onClick={(e) => {
+                if (justFinishedBoxSelectRef.current) return;
+
+                if (e.target === e.currentTarget && !selectionDragRef.current.active) {
+                  setSelectedIds([]);
+                }
+              }}
               onDragOver={handleTruckDragOver}
               onDrop={handleDrop}
               className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
@@ -982,59 +1151,70 @@ export default function App() {
                 backgroundSize: `${scale}px ${scale}px`,
               }}
             >
-              {displayedCases.map((c) => (
-                <div
-                  key={c.id}
-                  draggable
-                  onClick={() => setSelectedId(c.id)}
-                  onDragStart={() => handlePlacedCaseDragStart(c)}
-                  onDragEnd={handleDragEnd}
-                  onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
-                  onDoubleClick={() => {
-                    if (!selectedTruck) return;
-                    setCases((prev) =>
-                      prev.map((item) => {
-                        if (item.id !== c.id) return item;
-                        const rotated = { ...item, w: item.h, h: item.w };
-                        return {
-                          ...rotated,
-                          x: Math.min(rotated.x, truck.width - rotated.w),
-                          y: Math.min(rotated.y, truck.height - rotated.h),
-                        };
-                      })
-                    );
-                  }}
-                  className={`absolute border text-xs flex items-center justify-center ${
-                    selectedId === c.id ? 'border-yellow-400' : ''
-                  } ${draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'}`}
-                  style={{
-                    left: c.x * scale,
-                    top: c.y * scale,
-                    width: c.w * scale,
-                    height: c.h * scale,
-                    zIndex: c.z,
-                    touchAction: 'none',
-                    userSelect: 'none',
-                    WebkitUserSelect: 'none',
-                    backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
-                    borderColor: selectedId === c.id ? undefined : c.borderColor || DEFAULT_CASE_COLOR.border,
-                  }}
-                >
-                  {c.name}
-                  {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
-                  <button
-                    onTouchStart={(e) => e.stopPropagation()}
+              {displayedCases.map((c) => {
+                const isSelected = selectedIds.includes(c.id);
+
+                return (
+                  <div
+                    key={c.id}
+                    draggable
                     onClick={(e) => {
                       e.stopPropagation();
-                      setCases((prev) => prev.filter((item) => item.id !== c.id));
-                      if (selectedId === c.id) setSelectedId(null);
+                      handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
                     }}
-                    className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                    onDragStart={() => handlePlacedCaseDragStart(c)}
+                    onDragEnd={handleDragEnd}
+                    onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
+                    onDoubleClick={() => {
+                      if (!selectedTruck) return;
+
+                      setCases((prev) =>
+                        prev.map((item) => {
+                          if (item.id !== c.id) return item;
+
+                          const rotated = { ...item, w: item.h, h: item.w };
+                          return {
+                            ...rotated,
+                            x: Math.min(rotated.x, truck.width - rotated.w),
+                            y: Math.min(rotated.y, truck.height - rotated.h),
+                          };
+                        })
+                      );
+                    }}
+                    className={`absolute border-2 text-xs flex items-center justify-center ${
+                      draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'
+                    }`}
+                    style={{
+                      left: c.x * scale,
+                      top: c.y * scale,
+                      width: c.w * scale,
+                      height: c.h * scale,
+                      zIndex: c.z,
+                      touchAction: 'none',
+                      userSelect: 'none',
+                      WebkitUserSelect: 'none',
+                      backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
+                      borderColor: isSelected ? '#facc15' : c.borderColor || DEFAULT_CASE_COLOR.border,
+                      boxShadow: isSelected ? '0 0 0 2px rgba(250, 204, 21, 0.25)' : 'none',
+                    }}
                   >
-                    X
-                  </button>
-                </div>
-              ))}
+                    {c.name}
+                    {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
+
+                    <button
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCases((prev) => prev.filter((item) => item.id !== c.id));
+                        setSelectedIds((prev) => prev.filter((id) => id !== c.id));
+                      }}
+                      className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                    >
+                      X
+                    </button>
+                  </div>
+                );
+              })}
 
               {ghost && (
                 <div
@@ -1044,6 +1224,19 @@ export default function App() {
                     top: ghost.y * scale,
                     width: ghost.w * scale,
                     height: ghost.h * scale,
+                  }}
+                />
+              )}
+
+              {selectionBox && (
+                <div
+                  className="absolute pointer-events-none border border-dashed border-sky-300 bg-sky-400/15"
+                  style={{
+                    left: selectionBox.left,
+                    top: selectionBox.top,
+                    width: selectionBox.width,
+                    height: selectionBox.height,
+                    zIndex: 1000,
                   }}
                 />
               )}
@@ -1092,6 +1285,7 @@ export default function App() {
                     <div className="text-sm text-slate-300">
                       {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
                     </div>
+
                     <button
                       onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
@@ -1107,22 +1301,38 @@ export default function App() {
               </div>
             </div>
 
-            {selectedCase && (
+            {hasSelection && (
               <div className="bg-slate-800 p-3 rounded space-y-2" style={{ width: truckPixelWidth }}>
-                <h3 className="text-lg font-semibold">Selected Case</h3>
-                <input
-                  value={selectedCase.name}
-                  onChange={(e) => renameSelected(e.target.value)}
-                  className="w-full bg-slate-900 p-1 rounded"
-                />
+                <h3 className="text-lg font-semibold">
+                  {selectedCases.length === 1 ? 'Selected Case' : 'Selected Cases'}
+                </h3>
+
+                {selectedCase ? (
+                  <input
+                    value={selectedCase.name}
+                    onChange={(e) => renameSelected(e.target.value)}
+                    className="w-full bg-slate-900 p-1 rounded"
+                  />
+                ) : (
+                  <div className="rounded bg-slate-900 p-2 text-sm text-slate-300">
+                    {selectedCases.length} cases selected
+                  </div>
+                )}
+
                 <div className="text-sm text-slate-400">
-                  Stack qty: {selectedCase.stackCount || 1}
+                  {selectedCase
+                    ? `Stack qty: ${selectedCase.stackCount || 1}`
+                    : `Bulk actions will apply to all ${selectedCases.length} selected cases.`}
                 </div>
+
                 <div>
                   <div className="mb-1 text-sm text-slate-300">Case Color</div>
                   <div className="flex flex-wrap gap-2">
                     {CASE_COLORS.map((color) => {
-                      const isActive = (selectedCase.color || DEFAULT_CASE_COLOR.value) === color.value;
+                      const isActive =
+                        selectedCases.length > 0 &&
+                        selectedCases.every((item) => (item.color || DEFAULT_CASE_COLOR.value) === color.value);
+
                       return (
                         <button
                           key={color.label}
@@ -1135,6 +1345,7 @@ export default function App() {
                     })}
                   </div>
                 </div>
+
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={rotateSelected}
@@ -1147,6 +1358,12 @@ export default function App() {
                     className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
                   >
                     Duplicate
+                  </button>
+                  <button
+                    onClick={() => setSelectedIds([])}
+                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                  >
+                    Clear Selection
                   </button>
                   <button
                     onClick={removeSelected}
