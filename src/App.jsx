@@ -428,6 +428,79 @@ export default function App() {
     );
   }
 
+  function rotateSelected() {
+    if (!hasSelection || !selectedTruck) return;
+
+    if (selectedIds.length === 1) {
+      setCases((prev) =>
+        prev.map((c) => {
+          if (!selectedIds.includes(c.id)) return c;
+
+          const rotated = { ...c, w: c.h, h: c.w };
+          return {
+            ...rotated,
+            x: clamp(rotated.x, 0, truck.width - rotated.w),
+            y: clamp(rotated.y, 0, truck.height - rotated.h),
+          };
+        })
+      );
+      return;
+    }
+
+    const groupItems = cases.filter((c) => selectedIds.includes(c.id));
+    if (groupItems.length <= 1) return;
+
+    const minX = Math.min(...groupItems.map((c) => c.x));
+    const minY = Math.min(...groupItems.map((c) => c.y));
+    const maxX = Math.max(...groupItems.map((c) => c.x + c.w));
+    const maxY = Math.max(...groupItems.map((c) => c.y + c.h));
+
+    const groupWidth = maxX - minX;
+    const groupHeight = maxY - minY;
+
+    const rotatedItems = groupItems.map((c) => {
+      const relX = c.x - minX;
+      const relY = c.y - minY;
+      const newW = c.h;
+      const newH = c.w;
+
+      const rotatedRelX = groupHeight - (relY + c.h);
+      const rotatedRelY = relX;
+
+      return {
+        ...c,
+        x: rotatedRelX,
+        y: rotatedRelY,
+        w: newW,
+        h: newH,
+      };
+    });
+
+    const rotatedMinX = Math.min(...rotatedItems.map((c) => c.x));
+    const rotatedMinY = Math.min(...rotatedItems.map((c) => c.y));
+    const rotatedMaxX = Math.max(...rotatedItems.map((c) => c.x + c.w));
+    const rotatedMaxY = Math.max(...rotatedItems.map((c) => c.y + c.h));
+
+    let placedX = minX;
+    let placedY = minY;
+
+    placedX = clamp(placedX, -rotatedMinX, truck.width - rotatedMaxX);
+    placedY = clamp(placedY, -rotatedMinY, truck.height - rotatedMaxY);
+
+    const rotatedMap = new Map(
+      rotatedItems.map((c) => [
+        c.id,
+        {
+          ...c,
+          x: snapHalf(c.x + placedX),
+          y: snapHalf(c.y + placedY),
+        },
+      ])
+    );
+
+    setCases((prev) => prev.map((c) => (rotatedMap.has(c.id) ? rotatedMap.get(c.id) : c)));
+  }
+
   async function renameTemplate(templateId, newNameValue) {
     setTemplates((prev) =>
       prev.map((template) =>
@@ -459,23 +532,6 @@ export default function App() {
       color: nextColor.value,
       borderColor: nextColor.border,
     }));
-  }
-
-  function rotateSelected() {
-    if (!hasSelection || !selectedTruck) return;
-
-    setCases((prev) =>
-      prev.map((c) => {
-        if (!selectedIds.includes(c.id)) return c;
-
-        const rotated = { ...c, w: c.h, h: c.w };
-        return {
-          ...rotated,
-          x: clamp(rotated.x, 0, truck.width - rotated.w),
-          y: clamp(rotated.y, 0, truck.height - rotated.h),
-        };
-      })
-    );
   }
 
   function duplicateSelected() {
@@ -1344,22 +1400,7 @@ export default function App() {
                     onDragStart={() => handlePlacedCaseDragStart(c)}
                     onDragEnd={handleDragEnd}
                     onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
-                    onDoubleClick={() => {
-                      if (!selectedTruck) return;
-
-                      setCases((prev) =>
-                        prev.map((item) => {
-                          if (item.id !== c.id) return item;
-
-                          const rotated = { ...item, w: item.h, h: item.w };
-                          return {
-                            ...rotated,
-                            x: Math.min(rotated.x, truck.width - rotated.w),
-                            y: Math.min(rotated.y, truck.height - rotated.h),
-                          };
-                        })
-                      );
-                    }}
+                    onDoubleClick={() => rotateSelected()}
                     className={`absolute border-2 text-xs flex items-center justify-center ${
                       draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'
                     }`}
