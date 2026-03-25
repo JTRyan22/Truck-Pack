@@ -1,6 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase';
 
+const CASE_COLORS = [
+  { label: 'Blue', value: 'rgba(14, 165, 233, 0.35)', border: 'rgb(125, 211, 252)' },
+  { label: 'Green', value: 'rgba(34, 197, 94, 0.35)', border: 'rgb(134, 239, 172)' },
+  { label: 'Amber', value: 'rgba(245, 158, 11, 0.35)', border: 'rgb(252, 211, 77)' },
+  { label: 'Rose', value: 'rgba(244, 63, 94, 0.35)', border: 'rgb(253, 164, 175)' },
+  { label: 'Violet', value: 'rgba(168, 85, 247, 0.35)', border: 'rgb(196, 181, 253)' },
+  { label: 'Slate', value: 'rgba(100, 116, 139, 0.45)', border: 'rgb(203, 213, 225)' },
+];
+
+const DEFAULT_CASE_COLOR = CASE_COLORS[0];
+
 export default function App() {
   const [truckPresets, setTruckPresets] = useState([]);
   const [selectedTruckId, setSelectedTruckId] = useState('');
@@ -233,6 +244,16 @@ export default function App() {
     updateCase(selectedCase.id, (c) => ({ ...c, name: newNameValue }));
   }
 
+  function recolorSelected(colorValue) {
+    if (!selectedCase) return;
+    const nextColor = CASE_COLORS.find((color) => color.value === colorValue) || DEFAULT_CASE_COLOR;
+    updateCase(selectedCase.id, (c) => ({
+      ...c,
+      color: nextColor.value,
+      borderColor: nextColor.border,
+    }));
+  }
+
   function rotateSelected() {
     if (!selectedCase || !selectedTruck) return;
     updateCase(selectedCase.id, (c) => {
@@ -258,6 +279,8 @@ export default function App() {
         y: clamp(selectedCase.y + 1, 0, truck.height - selectedCase.h),
         z: nextZ(prev),
         stackCount: selectedCase.stackCount || 1,
+        color: selectedCase.color || DEFAULT_CASE_COLOR.value,
+        borderColor: selectedCase.borderColor || DEFAULT_CASE_COLOR.border,
       },
     ]);
     setSelectedId(newId);
@@ -335,6 +358,8 @@ export default function App() {
         h: Number(c.h),
         z: Number(c.z),
         stackCount: Number(c.stack_count || 1),
+        color: c.color || DEFAULT_CASE_COLOR.value,
+        borderColor: c.border_color || DEFAULT_CASE_COLOR.border,
       }))
     );
     setSelectedId(null);
@@ -541,6 +566,8 @@ export default function App() {
         y: clamp(snapHalf(y), 0, truck.height - h),
         z: nextZ(prev),
         stackCount: 1,
+        color: DEFAULT_CASE_COLOR.value,
+        borderColor: DEFAULT_CASE_COLOR.border,
       },
     ]);
     setSelectedId(newId);
@@ -975,8 +1002,8 @@ export default function App() {
                       })
                     );
                   }}
-                  className={`absolute bg-sky-500/40 border text-xs flex items-center justify-center ${
-                    selectedId === c.id ? 'border-yellow-400' : 'border-sky-300'
+                  className={`absolute border text-xs flex items-center justify-center ${
+                    selectedId === c.id ? 'border-yellow-400' : ''
                   } ${draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'}`}
                   style={{
                     left: c.x * scale,
@@ -987,6 +1014,8 @@ export default function App() {
                     touchAction: 'none',
                     userSelect: 'none',
                     WebkitUserSelect: 'none',
+                    backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
+                    borderColor: selectedId === c.id ? undefined : c.borderColor || DEFAULT_CASE_COLOR.border,
                   }}
                 >
                   {c.name}
@@ -1086,6 +1115,23 @@ export default function App() {
                 />
                 <div className="text-sm text-slate-400">
                   Stack qty: {selectedCase.stackCount || 1}
+                </div>
+                <div>
+                  <div className="mb-1 text-sm text-slate-300">Case Color</div>
+                  <div className="flex flex-wrap gap-2">
+                    {CASE_COLORS.map((color) => {
+                      const isActive = (selectedCase.color || DEFAULT_CASE_COLOR.value) === color.value;
+                      return (
+                        <button
+                          key={color.label}
+                          onClick={() => recolorSelected(color.value)}
+                          title={color.label}
+                          className={`h-8 w-8 rounded border ${isActive ? 'border-white' : 'border-slate-500'}`}
+                          style={{ backgroundColor: color.value }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button
