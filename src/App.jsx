@@ -28,6 +28,14 @@ export default function App() {
 
   const truckRef = useRef(null);
   const justFinishedBoxSelectRef = useRef(false);
+  const groupDragRef = useRef({
+    active: false,
+    anchorId: null,
+    startX: 0,
+    startY: 0,
+    bounds: null,
+    itemPositions: [],
+  });
 
   const [templates, setTemplates] = useState([]);
 
@@ -116,6 +124,19 @@ export default function App() {
         );
 
         if (!pos) return;
+
+        if (groupDragRef.current.active) {
+          const groupMove = getClampedGroupMove(pos.x, pos.y);
+          applyGroupMove(groupMove.dx, groupMove.dy);
+          setGhost({
+            x: groupDragRef.current.bounds.minX + groupMove.dx,
+            y: groupDragRef.current.bounds.minY + groupMove.dy,
+            w: groupDragRef.current.bounds.maxX - groupDragRef.current.bounds.minX,
+            h: groupDragRef.current.bounds.maxY - groupDragRef.current.bounds.minY,
+            isGroup: true,
+          });
+          return;
+        }
 
         setCases((prev) =>
           prev.map((c) =>
@@ -332,6 +353,81 @@ export default function App() {
     setSelectedIds(hitIds);
   }
 
+  function beginGroupDrag(anchorCase) {
+    const groupItems = cases.filter((c) => selectedIds.includes(c.id));
+    if (groupItems.length <= 1) {
+      groupDragRef.current = {
+        active: false,
+        anchorId: null,
+        startX: 0,
+        startY: 0,
+        bounds: null,
+        itemPositions: [],
+      };
+      return false;
+    }
+
+    const minX = Math.min(...groupItems.map((c) => c.x));
+    const minY = Math.min(...groupItems.map((c) => c.y));
+    const maxX = Math.max(...groupItems.map((c) => c.x + c.w));
+    const maxY = Math.max(...groupItems.map((c) => c.y + c.h));
+
+    groupDragRef.current = {
+      active: true,
+      anchorId: anchorCase.id,
+      startX: anchorCase.x,
+      startY: anchorCase.y,
+      bounds: { minX, minY, maxX, maxY },
+      itemPositions: groupItems.map((c) => ({
+        id: c.id,
+        x: c.x,
+        y: c.y,
+      })),
+    };
+
+    setGhost({
+      x: minX,
+      y: minY,
+      w: maxX - minX,
+      h: maxY - minY,
+      isGroup: true,
+    });
+
+    return true;
+  }
+
+  function getClampedGroupMove(nextAnchorX, nextAnchorY) {
+    const group = groupDragRef.current;
+
+    const rawDx = nextAnchorX - group.startX;
+    const rawDy = nextAnchorY - group.startY;
+
+    const minDx = -group.bounds.minX;
+    const maxDx = truck.width - group.bounds.maxX;
+    const minDy = -group.bounds.minY;
+    const maxDy = truck.height - group.bounds.maxY;
+
+    return {
+      dx: snapHalf(clamp(rawDx, minDx, maxDx)),
+      dy: snapHalf(clamp(rawDy, minDy, maxDy)),
+    };
+  }
+
+  function applyGroupMove(dx, dy) {
+    setCases((prev) =>
+      prev.map((c) => {
+        const original = groupDragRef.current.itemPositions.find((item) => item.id === c.id);
+        if (!original) return c;
+
+        return {
+          ...c,
+          x: original.x + dx,
+          y: original.y + dy,
+        };
+      })
+    );
+  }
+
   async function renameTemplate(templateId, newNameValue) {
     setTemplates((prev) =>
       prev.map((template) =>
@@ -440,6 +536,15 @@ export default function App() {
       startY: 0,
       additive: false,
       baseSelection: [],
+    };
+
+    groupDragRef.current = {
+      active: false,
+      anchorId: null,
+      startX: 0,
+      startY: 0,
+      bounds: null,
+      itemPositions: [],
     };
   }
 
@@ -773,6 +878,15 @@ export default function App() {
       offsetX: 0,
       offsetY: 0,
     };
+
+    groupDragRef.current = {
+      active: false,
+      anchorId: null,
+      startX: 0,
+      startY: 0,
+      bounds: null,
+      itemPositions: [],
+    };
   }
 
   function finishTemplatePlacement(templateSnapshot, pos) {
@@ -858,10 +972,26 @@ export default function App() {
   function handlePlacedCaseDragStart(caseItem) {
     setDraggingCaseId(caseItem.id);
     setDraggingTemplate(null);
+
+    const shouldGroupDrag = selectedIds.includes(caseItem.id) && selectedIds.length > 1;
+
     if (!selectedIds.includes(caseItem.id)) {
       setSelectedIds([caseItem.id]);
     }
-    setGhost({ ...caseItem });
+
+    if (shouldGroupDrag) {
+      beginGroupDrag(caseItem);
+    } else {
+      groupDragRef.current = {
+        active: false,
+        anchorId: null,
+        startX: 0,
+        startY: 0,
+        bounds: null,
+        itemPositions: [],
+      };
+      setGhost({ ...caseItem });
+    }
   }
 
   function handleTruckDragOver(event) {
@@ -878,6 +1008,24 @@ export default function App() {
     if (draggingCaseId !== null) {
       const draggedCase = cases.find((c) => c.id === draggingCaseId);
       if (!draggedCase) return;
+
+      if (groupDragRef.current.active) {
+        const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
+        if (!pos) return;
+
+        const groupMove = getClampedGroupMove(pos.x, pos.y);
+        applyGroupMove(groupMove.dx, groupMove.dy);
+
+        setGhost({
+          x: groupDragRef.current.bounds.minX + groupMove.dx,
+          y: groupDragRef.current.bounds.minY + groupMove.dy,
+          w: groupDragRef.current.bounds.maxX - groupDragRef.current.bounds.minX,
+          h: groupDragRef.current.bounds.maxY - groupDragRef.current.bounds.minY,
+          isGroup: true,
+        });
+        return;
+      }
+
       const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
       setGhost(pos ? { ...draggedCase, ...pos } : null);
     }
@@ -900,22 +1048,24 @@ export default function App() {
       const pos = getTruckPosition(e.clientX, e.clientY, dragged);
 
       if (dragged && pos) {
-        const updated = { ...dragged, x: pos.x, y: pos.y };
-        const target = findStackTarget(updated, pos, draggingCaseId);
+        if (!groupDragRef.current.active) {
+          const updated = { ...dragged, x: pos.x, y: pos.y };
+          const target = findStackTarget(updated, pos, draggingCaseId);
 
-        if (target) {
-          setCases((prev) =>
-            prev
-              .map((c) =>
-                c.id === target.id
-                  ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
-                  : c
-              )
-              .filter((c) => c.id !== draggingCaseId)
-          );
-          setSelectedIds([target.id]);
-        } else {
-          updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
+          if (target) {
+            setCases((prev) =>
+              prev
+                .map((c) =>
+                  c.id === target.id
+                    ? { ...c, stackCount: (c.stackCount || 1) + (dragged.stackCount || 1) }
+                    : c
+                )
+                .filter((c) => c.id !== draggingCaseId)
+            );
+            setSelectedIds([target.id]);
+          } else {
+            updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
+          }
         }
       }
     }
@@ -929,6 +1079,15 @@ export default function App() {
     setDraggingTemplate(null);
     setDraggingCaseId(null);
     setGhost(null);
+
+    groupDragRef.current = {
+      active: false,
+      anchorId: null,
+      startX: 0,
+      startY: 0,
+      bounds: null,
+      itemPositions: [],
+    };
   }
 
   function handlePlacedCaseTouchStart(e, caseItem) {
@@ -946,8 +1105,26 @@ export default function App() {
       offsetY: touch.clientY - rect.top,
     };
 
-    setSelectedIds([caseItem.id]);
+    const shouldGroupDrag = selectedIds.includes(caseItem.id) && selectedIds.length > 1;
+
+    if (!selectedIds.includes(caseItem.id)) {
+      setSelectedIds([caseItem.id]);
+    }
+
     setDraggingCaseId(caseItem.id);
+
+    if (shouldGroupDrag) {
+      beginGroupDrag(caseItem);
+    } else {
+      groupDragRef.current = {
+        active: false,
+        anchorId: null,
+        startX: 0,
+        startY: 0,
+        bounds: null,
+        itemPositions: [],
+      };
+    }
   }
 
   function finishTouchCaseDrag(caseId) {
@@ -1153,6 +1330,8 @@ export default function App() {
             >
               {displayedCases.map((c) => {
                 const isSelected = selectedIds.includes(c.id);
+                const hideForGroupGhost =
+                  groupDragRef.current.active && selectedIds.includes(c.id) && draggingCaseId !== null;
 
                 return (
                   <div
@@ -1196,6 +1375,7 @@ export default function App() {
                       backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
                       borderColor: isSelected ? '#facc15' : c.borderColor || DEFAULT_CASE_COLOR.border,
                       boxShadow: isSelected ? '0 0 0 2px rgba(250, 204, 21, 0.25)' : 'none',
+                      opacity: hideForGroupGhost ? 0.15 : 1,
                     }}
                   >
                     {c.name}
