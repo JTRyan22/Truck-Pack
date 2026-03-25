@@ -28,6 +28,7 @@ export default function App() {
 
   const truckRef = useRef(null);
   const justFinishedBoxSelectRef = useRef(false);
+  const transparentDragImageRef = useRef(null);
   const groupDragRef = useRef({
     active: false,
     anchorId: null,
@@ -69,6 +70,19 @@ export default function App() {
     additive: false,
     baseSelection: [],
   });
+
+  useEffect(() => {
+    const img = new Image();
+    img.src =
+      'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    transparentDragImageRef.current = img;
+  }, []);
+
+  function setTransparentDragImage(event) {
+    if (transparentDragImageRef.current && event.dataTransfer) {
+      event.dataTransfer.setDragImage(transparentDragImageRef.current, 0, 0);
+    }
+  }
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
@@ -455,7 +469,6 @@ export default function App() {
     const maxX = Math.max(...groupItems.map((c) => c.x + c.w));
     const maxY = Math.max(...groupItems.map((c) => c.y + c.h));
 
-    const groupWidth = maxX - minX;
     const groupHeight = maxY - minY;
 
     const rotatedItems = groupItems.map((c) => {
@@ -960,7 +973,9 @@ export default function App() {
     }
   }
 
-  function handleTemplateDragStart(template) {
+  function handleTemplateDragStart(event, template) {
+    setTransparentDragImage(event);
+
     const dragTemplate = {
       ...template,
       w: Number(template.length_in) / 6,
@@ -1025,7 +1040,9 @@ export default function App() {
     setGhost(null);
   }
 
-  function handlePlacedCaseDragStart(caseItem) {
+  function handlePlacedCaseDragStart(event, caseItem) {
+    setTransparentDragImage(event);
+
     setDraggingCaseId(caseItem.id);
     setDraggingTemplate(null);
 
@@ -1386,8 +1403,10 @@ export default function App() {
             >
               {displayedCases.map((c) => {
                 const isSelected = selectedIds.includes(c.id);
-                const hideForGroupGhost =
-                  groupDragRef.current.active && selectedIds.includes(c.id) && draggingCaseId !== null;
+                const hideDuringDrag =
+                  draggingCaseId !== null &&
+                  (c.id === draggingCaseId ||
+                    (groupDragRef.current.active && selectedIds.includes(c.id)));
 
                 return (
                   <div
@@ -1397,7 +1416,7 @@ export default function App() {
                       e.stopPropagation();
                       handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
                     }}
-                    onDragStart={() => handlePlacedCaseDragStart(c)}
+                    onDragStart={(e) => handlePlacedCaseDragStart(e, c)}
                     onDragEnd={handleDragEnd}
                     onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
                     onDoubleClick={() => rotateSelected()}
@@ -1416,7 +1435,8 @@ export default function App() {
                       backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
                       borderColor: isSelected ? '#facc15' : c.borderColor || DEFAULT_CASE_COLOR.border,
                       boxShadow: isSelected ? '0 0 0 2px rgba(250, 204, 21, 0.25)' : 'none',
-                      opacity: hideForGroupGhost ? 0.15 : 1,
+                      opacity: hideDuringDrag ? 0.08 : 1,
+                      pointerEvents: 'auto',
                     }}
                   >
                     {c.name}
@@ -1487,7 +1507,7 @@ export default function App() {
                   <div
                     key={t.id}
                     draggable
-                    onDragStart={() => handleTemplateDragStart(t)}
+                    onDragStart={(e) => handleTemplateDragStart(e, t)}
                     onDragEnd={handleDragEnd}
                     onTouchStart={(e) => handleTemplateTouchStart(e, t)}
                     className="relative p-2 bg-slate-700 rounded cursor-grab"
