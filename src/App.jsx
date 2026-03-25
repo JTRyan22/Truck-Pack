@@ -418,6 +418,8 @@ export default function App() {
         h: c.h,
         z: c.z,
         stack_count: c.stackCount || 1,
+        color: c.color || DEFAULT_CASE_COLOR.value,
+        border_color: c.borderColor || DEFAULT_CASE_COLOR.border,
       }));
 
       const { error: insertError } = await supabase.from('pack_cases').insert(rows);
