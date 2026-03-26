@@ -1066,9 +1066,42 @@ export default function App() {
     );
   }
 
+  function resetInteractionOverlays() {
+    setGhost(null);
+    setSelectionBox(null);
+    setDraggingCaseId(null);
+    setDraggingTemplate(null);
+
+    pointerCaseDragRef.current = {
+      active: false,
+      pointerId: null,
+      caseId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+
+    touchCaseDragRef.current = {
+      active: false,
+      caseId: null,
+      offsetX: 0,
+      offsetY: 0,
+    };
+
+    groupDragRef.current = {
+      active: false,
+      anchorId: null,
+      startX: 0,
+      startY: 0,
+      startZone: 'truck',
+      bounds: null,
+      itemPositions: [],
+    };
+  }
+
   function rotateSelected() {
     if (!hasSelection || !selectedTruck) return;
 
+    resetInteractionOverlays();
     const before = snapshotState();
     const selectedItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
     if (selectedItems.length === 0) return;
@@ -2031,6 +2064,7 @@ export default function App() {
     const before = dragStartSnapshotRef.current;
     const dragged = casesRef.current.find((c) => c.id === caseId);
     finishCaseMove(caseId, dragged);
+    setGhost(null);
 
     pointerCaseDragRef.current = {
       active: false,
@@ -2098,6 +2132,7 @@ export default function App() {
     const before = dragStartSnapshotRef.current;
     const dragged = casesRef.current.find((c) => c.id === caseId);
     finishCaseMove(caseId, dragged);
+    setGhost(null);
 
     if (before) {
       const after = snapshotState();
