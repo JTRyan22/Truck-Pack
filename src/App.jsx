@@ -654,8 +654,8 @@ export default function App() {
     const maxDy = truck.height - group.bounds.maxY;
 
     return {
-      dx: snapHalf(clamp(rawDx, minDx, maxDx)),
-      dy: snapHalf(clamp(rawDy, minDy, maxDy)),
+      dx: clamp(rawDx, minDx, maxDx),
+      dy: clamp(rawDy, minDy, maxDy),
     };
   }
 
@@ -1149,8 +1149,8 @@ export default function App() {
     const rawY = (clientY - rect.top) / scale - item.h / 2;
 
     return {
-      x: clamp(snapHalf(rawX), 0, truck.width - item.w),
-      y: clamp(snapHalf(rawY), 0, truck.height - item.h),
+      x: clamp(rawX, 0, truck.width - item.w),
+      y: clamp(rawY, 0, truck.height - item.h),
     };
   }
 
@@ -1162,8 +1162,8 @@ export default function App() {
     const rawY = (clientY - rect.top - offsetY) / scale;
 
     return {
-      x: clamp(snapHalf(rawX), 0, truck.width - item.w),
-      y: clamp(snapHalf(rawY), 0, truck.height - item.h),
+      x: clamp(rawX, 0, truck.width - item.w),
+      y: clamp(rawY, 0, truck.height - item.h),
     };
   }
 
@@ -1817,7 +1817,7 @@ export default function App() {
                       className="w-full bg-slate-900 p-1 rounded mb-1"
                     />
                     <div className="text-sm text-slate-300">
-                      {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
+                      {Number(t.length_in).toFixed(2)} L ├ù {Number(t.width_in).toFixed(2)} W in
                     </div>
 
                     <button
