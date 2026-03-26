@@ -1545,43 +1545,6 @@ export default function App() {
           </div>
 
           <div className="bg-slate-800 p-3 rounded">
-            <h3 className="text-lg font-semibold mb-2">Edit</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={undo}
-                disabled={historyPast.length === 0}
-                className={`p-2 rounded ${historyPast.length === 0 ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
-              >
-                Undo
-              </button>
-              <button
-                onClick={redo}
-                disabled={historyFuture.length === 0}
-                className={`p-2 rounded ${historyFuture.length === 0 ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
-              >
-                Redo
-              </button>
-              <button
-                onClick={copySelection}
-                disabled={!hasSelection}
-                className={`p-2 rounded ${!hasSelection ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
-              >
-                Copy
-              </button>
-              <button
-                onClick={pasteClipboard}
-                disabled={!clipboard || !selectedTruck}
-                className={`p-2 rounded ${!clipboard || !selectedTruck ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700'}`}
-              >
-                Paste
-              </button>
-            </div>
-            <div className="mt-2 text-xs text-slate-400">
-              Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+C, Ctrl/Cmd+V
-            </div>
-          </div>
-
-          <div className="bg-slate-800 p-3 rounded">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-semibold">Truck Size</h3>
               <button
@@ -1930,21 +1893,7 @@ export default function App() {
                   >
                     Duplicate
                   </button>
-                  <button
-                    onClick={copySelection}
-                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                  >
-                    Copy
-                  </button>
-                  <button
-                    onClick={pasteClipboard}
-                    className={`rounded px-2 py-1 ${
-                      !clipboard ? 'bg-slate-700/50 text-slate-400' : 'bg-slate-700 hover:bg-slate-600'
-                    }`}
-                    disabled={!clipboard}
-                  >
-                    Paste
-                  </button>
+                  
                   <button
                     onClick={() => setSelectedIds([])}
                     className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
