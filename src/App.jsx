@@ -32,6 +32,7 @@ export default function App() {
   const [clipboard, setClipboard] = useState(null);
 
   const truckRef = useRef(null);
+  const waitingRef = useRef(null);
   const justFinishedBoxSelectRef = useRef(false);
   const transparentDragImageRef = useRef(null);
   const dragStartSnapshotRef = useRef(null);
@@ -47,6 +48,7 @@ export default function App() {
     anchorId: null,
     startX: 0,
     startY: 0,
+    startZone: 'truck',
     bounds: null,
     itemPositions: [],
   });
@@ -161,6 +163,7 @@ export default function App() {
       anchorId: null,
       startX: 0,
       startY: 0,
+      startZone: 'truck',
       bounds: null,
       itemPositions: [],
     };
@@ -216,6 +219,7 @@ export default function App() {
         borderColor: c.borderColor || DEFAULT_CASE_COLOR.border,
         relX: c.x - minX,
         relY: c.y - minY,
+        zone: c.zone || 'truck',
       })),
       width:
         Math.max(...currentSelectedCases.map((c) => c.x + c.w)) - minX,
@@ -339,6 +343,10 @@ export default function App() {
   const scale = 14;
   const truckPixelWidth = Math.max(truck.width * scale, 300);
   const truckPixelHeight = Math.max(truck.height * scale, 120);
+  const waitingArea = { width: Math.max(truck.width, 20), height: Math.max(truck.height, 12) };
+  const waitingPixelWidth = Math.max(waitingArea.width * scale, truckPixelWidth);
+  const waitingPixelHeight = Math.max(waitingArea.height * scale, truckPixelHeight);
+  const dragGraceUnits = 1.5;
 
   const selectedCases = cases.filter((c) => selectedIds.includes(c.id));
   const selectedCase = selectedCases.length === 1 ? selectedCases[0] : null;
@@ -361,10 +369,11 @@ export default function App() {
         const dragged = casesRef.current.find((c) => c.id === touchCaseDragRef.current.caseId);
         if (!dragged) return;
 
-        const pos = getTruckPositionFromTopLeft(
+        const pos = getDragPosition(
           touch.clientX,
           touch.clientY,
           dragged,
+          dragged.zone || 'truck',
           touchCaseDragRef.current.offsetX,
           touchCaseDragRef.current.offsetY
         );
@@ -372,13 +381,14 @@ export default function App() {
         if (!pos) return;
 
         if (groupDragRef.current.active) {
-          const groupMove = getClampedGroupMove(pos.x, pos.y);
-          applyGroupMove(groupMove.dx, groupMove.dy);
+          const groupMove = getClampedGroupMove(pos.x, pos.y, pos.zone);
+          applyGroupMove(groupMove.dx, groupMove.dy, groupMove.zone);
           setGhost({
             x: groupDragRef.current.bounds.minX + groupMove.dx,
             y: groupDragRef.current.bounds.minY + groupMove.dy,
             w: groupDragRef.current.bounds.maxX - groupDragRef.current.bounds.minX,
             h: groupDragRef.current.bounds.maxY - groupDragRef.current.bounds.minY,
+            zone: groupMove.zone,
             isGroup: true,
           });
           return;
@@ -391,6 +401,7 @@ export default function App() {
                   ...c,
                   x: pos.x,
                   y: pos.y,
+                  zone: pos.zone,
                 }
               : c
           )
@@ -404,10 +415,11 @@ export default function App() {
         const template = touchTemplateDragRef.current.template;
         if (!template) return;
 
-        const pos = getTruckPositionFromTopLeft(
+        const pos = getDragPosition(
           touch.clientX,
           touch.clientY,
           template,
+          'truck',
           touchTemplateDragRef.current.offsetX,
           touchTemplateDragRef.current.offsetY
         );
@@ -577,6 +589,7 @@ export default function App() {
     if (!box) return [];
 
     return casesRef.current
+      .filter((c) => (c.zone || 'truck') === 'truck')
       .filter((c) => {
         const left = c.x * scale;
         const top = c.y * scale;
@@ -600,13 +613,17 @@ export default function App() {
   }
 
   function beginGroupDrag(anchorCase) {
-    const groupItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
+    const anchorZone = anchorCase.zone || 'truck';
+    const groupItems = casesRef.current.filter(
+      (c) => selectedIdsRef.current.includes(c.id) && (c.zone || 'truck') === anchorZone
+    );
     if (groupItems.length <= 1) {
       groupDragRef.current = {
         active: false,
         anchorId: null,
         startX: 0,
         startY: 0,
+        startZone: 'truck',
         bounds: null,
         itemPositions: [],
       };
@@ -623,6 +640,7 @@ export default function App() {
       anchorId: anchorCase.id,
       startX: anchorCase.x,
       startY: anchorCase.y,
+      startZone: anchorZone,
       bounds: { minX, minY, maxX, maxY },
       itemPositions: groupItems.map((c) => ({
         id: c.id,
@@ -642,24 +660,27 @@ export default function App() {
     return true;
   }
 
-  function getClampedGroupMove(nextAnchorX, nextAnchorY) {
+  function getClampedGroupMove(nextAnchorX, nextAnchorY, targetZone = null) {
     const group = groupDragRef.current;
-
+    const zone = targetZone || group.startZone || 'truck';
+    const area = getAreaSize(zone);
     const rawDx = nextAnchorX - group.startX;
     const rawDy = nextAnchorY - group.startY;
 
     const minDx = -group.bounds.minX;
-    const maxDx = truck.width - group.bounds.maxX;
+    const maxDx = area.width - group.bounds.maxX;
     const minDy = -group.bounds.minY;
-    const maxDy = truck.height - group.bounds.maxY;
+    const maxDy = area.height - group.bounds.maxY;
 
     return {
       dx: clamp(rawDx, minDx, maxDx),
       dy: clamp(rawDy, minDy, maxDy),
+      zone,
     };
   }
 
-  function applyGroupMove(dx, dy) {
+  function applyGroupMove(dx, dy, targetZone = null) {
+    const zone = targetZone || groupDragRef.current.startZone || 'truck';
     setCases((prev) =>
       prev.map((c) => {
         const original = groupDragRef.current.itemPositions.find((item) => item.id === c.id);
@@ -669,6 +690,7 @@ export default function App() {
           ...c,
           x: original.x + dx,
           y: original.y + dy,
+          zone,
         };
       })
     );
@@ -678,17 +700,23 @@ export default function App() {
     if (!hasSelection || !selectedTruck) return;
 
     const before = snapshotState();
+    const selectedItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
+    if (selectedItems.length === 0) return;
 
-    if (selectedIds.length === 1) {
+    const zoneSet = new Set(selectedItems.map((c) => c.zone || 'truck'));
+    const singleZone = zoneSet.size === 1 ? selectedItems[0].zone || 'truck' : null;
+
+    if (selectedItems.length === 1 || !singleZone) {
       setCases((prev) =>
         prev.map((c) => {
-          if (!selectedIds.includes(c.id)) return c;
+          if (!selectedIdsRef.current.includes(c.id)) return c;
 
+          const area = getAreaSize(c.zone || 'truck');
           const rotated = { ...c, w: c.h, h: c.w };
           return {
             ...rotated,
-            x: clamp(rotated.x, 0, truck.width - rotated.w),
-            y: clamp(rotated.y, 0, truck.height - rotated.h),
+            x: clamp(rotated.x, 0, Math.max(0, area.width - rotated.w)),
+            y: clamp(rotated.y, 0, Math.max(0, area.height - rotated.h)),
           };
         })
       );
@@ -696,9 +724,10 @@ export default function App() {
       return;
     }
 
-    const groupItems = casesRef.current.filter((c) => selectedIdsRef.current.includes(c.id));
+    const groupItems = selectedItems.filter((c) => (c.zone || 'truck') === singleZone);
     if (groupItems.length <= 1) return;
 
+    const area = getAreaSize(singleZone);
     const minX = Math.min(...groupItems.map((c) => c.x));
     const minY = Math.min(...groupItems.map((c) => c.y));
     const maxX = Math.max(...groupItems.map((c) => c.x + c.w));
@@ -732,16 +761,16 @@ export default function App() {
     let placedX = minX;
     let placedY = minY;
 
-    placedX = clamp(placedX, -rotatedMinX, truck.width - rotatedMaxX);
-    placedY = clamp(placedY, -rotatedMinY, truck.height - rotatedMaxY);
+    placedX = clamp(placedX, -rotatedMinX, area.width - rotatedMaxX);
+    placedY = clamp(placedY, -rotatedMinY, area.height - rotatedMaxY);
 
     const rotatedMap = new Map(
       rotatedItems.map((c) => [
         c.id,
         {
           ...c,
-          x: snapHalf(c.x + placedX),
-          y: snapHalf(c.y + placedY),
+          x: c.x + placedX,
+          y: c.y + placedY,
         },
       ])
     );
@@ -861,6 +890,7 @@ export default function App() {
       anchorId: null,
       startX: 0,
       startY: 0,
+      startZone: 'truck',
       bounds: null,
       itemPositions: [],
     };
@@ -1115,7 +1145,7 @@ export default function App() {
     fetchTemplates();
   }
 
-  function addCaseFromTemplate(template, x = 1, y = 1) {
+  function addCaseFromTemplate(template, x = 1, y = 1, zone = 'truck') {
     if (!selectedTruck) return;
 
     const newId = makeLocalCaseId();
@@ -1130,8 +1160,9 @@ export default function App() {
         name: template.name,
         w,
         h,
-        x: clamp(snapHalf(x), 0, truck.width - w),
-        y: clamp(snapHalf(y), 0, truck.height - h),
+        x: clamp(x, 0, Math.max(0, getAreaSize(zone).width - w)),
+        y: clamp(y, 0, Math.max(0, getAreaSize(zone).height - h)),
+        zone,
         z: nextZ(prev),
         stackCount: 1,
         color: DEFAULT_CASE_COLOR.value,
@@ -1141,35 +1172,79 @@ export default function App() {
     setSelectedIds([newId]);
   }
 
-  function getTruckPosition(clientX, clientY, item) {
-    const rect = truckRef.current?.getBoundingClientRect();
+  function getAreaRect(zone) {
+    return zone === 'waiting'
+      ? waitingRef.current?.getBoundingClientRect()
+      : truckRef.current?.getBoundingClientRect();
+  }
+
+  function getAreaSize(zone) {
+    return zone === 'waiting' ? waitingArea : truck;
+  }
+
+  function getAreaPosition(clientX, clientY, item, zone = 'truck') {
+    const rect = getAreaRect(zone);
+    const area = getAreaSize(zone);
     if (!rect || !item || !selectedTruck) return null;
 
     const rawX = (clientX - rect.left) / scale - item.w / 2;
     const rawY = (clientY - rect.top) / scale - item.h / 2;
 
     return {
-      x: clamp(rawX, 0, truck.width - item.w),
-      y: clamp(rawY, 0, truck.height - item.h),
+      x: clamp(rawX, 0, Math.max(0, area.width - item.w)),
+      y: clamp(rawY, 0, Math.max(0, area.height - item.h)),
+      zone,
     };
   }
 
-  function getTruckPositionFromTopLeft(clientX, clientY, item, offsetX, offsetY) {
-    const rect = truckRef.current?.getBoundingClientRect();
+  function getAreaPositionFromTopLeft(clientX, clientY, item, offsetX, offsetY, zone = 'truck') {
+    const rect = getAreaRect(zone);
+    const area = getAreaSize(zone);
     if (!rect || !item || !selectedTruck) return null;
 
     const rawX = (clientX - rect.left - offsetX) / scale;
     const rawY = (clientY - rect.top - offsetY) / scale;
 
     return {
-      x: clamp(rawX, 0, truck.width - item.w),
-      y: clamp(rawY, 0, truck.height - item.h),
+      x: clamp(rawX, 0, Math.max(0, area.width - item.w)),
+      y: clamp(rawY, 0, Math.max(0, area.height - item.h)),
+      zone,
     };
+  }
+
+  function resolveDropZone(clientX, item, originZone = 'truck') {
+    const truckRect = truckRef.current?.getBoundingClientRect();
+    const waitingRect = waitingRef.current?.getBoundingClientRect();
+    if (!truckRect || !waitingRect || !item) return originZone;
+
+    if (originZone === 'truck') {
+      if (clientX > truckRect.right + dragGraceUnits * scale) {
+        return 'waiting';
+      }
+      return 'truck';
+    }
+
+    if (originZone === 'waiting') {
+      if (clientX < waitingRect.left - dragGraceUnits * scale) {
+        return 'truck';
+      }
+      return 'waiting';
+    }
+
+    return originZone;
+  }
+
+  function getDragPosition(clientX, clientY, item, originZone = 'truck', offsetX = null, offsetY = null) {
+    const zone = resolveDropZone(clientX, item, originZone);
+    return offsetX === null || offsetY === null
+      ? getAreaPosition(clientX, clientY, item, zone)
+      : getAreaPositionFromTopLeft(clientX, clientY, item, offsetX, offsetY, zone);
   }
 
   function findStackTarget(item, pos, ignoreId = null) {
     return (
       casesRef.current.find((c) => {
+        if ((c.zone || 'truck') !== 'truck') return false;
         if (ignoreId && c.id === ignoreId) return false;
         return (
           c.name === item.name &&
@@ -1183,7 +1258,7 @@ export default function App() {
   function finishCaseMove(caseId, caseSnapshot = null) {
     const dragged = caseSnapshot || casesRef.current.find((c) => c.id === caseId);
 
-    if (dragged) {
+    if (dragged && (dragged.zone || 'truck') === 'truck') {
       const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
 
       if (target) {
@@ -1214,6 +1289,7 @@ export default function App() {
       anchorId: null,
       startX: 0,
       startY: 0,
+      startZone: 'truck',
       bounds: null,
       itemPositions: [],
     };
@@ -1224,7 +1300,7 @@ export default function App() {
 
     const before = snapshotState();
 
-    const target = findStackTarget(templateSnapshot, pos);
+    const target = pos.zone === 'truck' ? findStackTarget(templateSnapshot, pos) : null;
     if (target) {
       updateCase(target.id, (c) => ({
         ...c,
@@ -1232,7 +1308,7 @@ export default function App() {
       }));
       setSelectedIds([target.id]);
     } else {
-      addCaseFromTemplate(templateSnapshot, pos.x, pos.y);
+      addCaseFromTemplate(templateSnapshot, pos.x, pos.y, pos.zone || 'truck');
     }
 
     pushHistorySnapshot(before);
@@ -1265,10 +1341,11 @@ export default function App() {
 
     const offsetX = touch.clientX - rect.left;
     const offsetY = touch.clientY - rect.top;
-    const pos = getTruckPositionFromTopLeft(
+    const pos = getDragPosition(
       touch.clientX,
       touch.clientY,
       dragTemplate,
+      'truck',
       offsetX,
       offsetY
     );
@@ -1312,7 +1389,9 @@ export default function App() {
     setDraggingCaseId(caseItem.id);
     setDraggingTemplate(null);
 
-    const shouldGroupDrag = selectedIdsRef.current.includes(caseItem.id) && selectedIdsRef.current.length > 1;
+    const shouldGroupDrag =
+      selectedIdsRef.current.includes(caseItem.id) &&
+      selectedIdsRef.current.length > 1;
 
     if (!selectedIdsRef.current.includes(caseItem.id)) {
       setSelectedIds([caseItem.id]);
@@ -1339,7 +1418,7 @@ export default function App() {
     if (!selectedTruck) return;
 
     if (draggingTemplate) {
-      const pos = getTruckPosition(event.clientX, event.clientY, draggingTemplate);
+      const pos = getDragPosition(event.clientX, event.clientY, draggingTemplate, 'truck');
       setGhost(pos ? { ...draggingTemplate, stackCount: 1, ...pos } : null);
       return;
     }
@@ -1349,34 +1428,73 @@ export default function App() {
       if (!draggedCase) return;
 
       if (groupDragRef.current.active) {
-        const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
+        const pos = getDragPosition(event.clientX, event.clientY, draggedCase, draggedCase.zone || 'truck');
         if (!pos) return;
 
-        const groupMove = getClampedGroupMove(pos.x, pos.y);
-        applyGroupMove(groupMove.dx, groupMove.dy);
+        const groupMove = getClampedGroupMove(pos.x, pos.y, pos.zone);
+        applyGroupMove(groupMove.dx, groupMove.dy, groupMove.zone);
 
         setGhost({
           x: groupDragRef.current.bounds.minX + groupMove.dx,
           y: groupDragRef.current.bounds.minY + groupMove.dy,
           w: groupDragRef.current.bounds.maxX - groupDragRef.current.bounds.minX,
           h: groupDragRef.current.bounds.maxY - groupDragRef.current.bounds.minY,
+          zone: groupMove.zone,
           isGroup: true,
         });
         return;
       }
 
-      const pos = getTruckPosition(event.clientX, event.clientY, draggedCase);
+      const pos = getDragPosition(event.clientX, event.clientY, draggedCase, draggedCase.zone || 'truck');
       setGhost(pos ? { ...draggedCase, ...pos } : null);
     }
   }
 
-  function handleDrop(e) {
+  function handleWaitingDragOver(event) {
+    event.preventDefault();
+
+    if (!selectedTruck) return;
+
+    if (draggingTemplate) {
+      const pos = getDragPosition(event.clientX, event.clientY, draggingTemplate, 'waiting');
+      setGhost(pos ? { ...draggingTemplate, stackCount: 1, ...pos } : null);
+      return;
+    }
+
+    if (draggingCaseId !== null) {
+      const draggedCase = casesRef.current.find((c) => c.id === draggingCaseId);
+      if (!draggedCase) return;
+
+      if (groupDragRef.current.active) {
+        const pos = getDragPosition(event.clientX, event.clientY, draggedCase, draggedCase.zone || 'truck');
+        if (!pos) return;
+
+        const groupMove = getClampedGroupMove(pos.x, pos.y, pos.zone);
+        applyGroupMove(groupMove.dx, groupMove.dy, groupMove.zone);
+
+        setGhost({
+          x: groupDragRef.current.bounds.minX + groupMove.dx,
+          y: groupDragRef.current.bounds.minY + groupMove.dy,
+          w: groupDragRef.current.bounds.maxX - groupDragRef.current.bounds.minX,
+          h: groupDragRef.current.bounds.maxY - groupDragRef.current.bounds.minY,
+          zone: groupMove.zone,
+          isGroup: true,
+        });
+        return;
+      }
+
+      const pos = getDragPosition(event.clientX, event.clientY, draggedCase, draggedCase.zone || 'truck');
+      setGhost(pos ? { ...draggedCase, ...pos } : null);
+    }
+  }
+
+  function handleDrop(e, dropZone = 'truck') {
     e.preventDefault();
 
     if (!selectedTruck) return;
 
     if (draggingTemplate) {
-      const pos = getTruckPosition(e.clientX, e.clientY, draggingTemplate);
+      const pos = getDragPosition(e.clientX, e.clientY, draggingTemplate, dropZone);
       if (pos) {
         finishTemplatePlacement(draggingTemplate, pos);
       }
@@ -1384,13 +1502,14 @@ export default function App() {
 
     if (draggingCaseId !== null) {
       const dragged = casesRef.current.find((c) => c.id === draggingCaseId);
-      const pos = getTruckPosition(e.clientX, e.clientY, dragged);
+      const pos = getDragPosition(e.clientX, e.clientY, dragged, dragged?.zone || dropZone);
 
       if (dragged && pos) {
         if (!groupDragRef.current.active) {
           const before = dragStartSnapshotRef.current || snapshotState();
-          const updated = { ...dragged, x: pos.x, y: pos.y };
-          const target = findStackTarget(updated, pos, draggingCaseId);
+          const updated = { ...dragged, x: pos.x, y: pos.y, zone: pos.zone };
+          const target =
+            pos.zone === 'truck' ? findStackTarget(updated, pos, draggingCaseId) : null;
 
           if (target) {
             setCases((prev) =>
@@ -1404,7 +1523,7 @@ export default function App() {
             );
             setSelectedIds([target.id]);
           } else {
-            updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y }));
+            updateCase(draggingCaseId, (c) => ({ ...c, x: pos.x, y: pos.y, zone: pos.zone }));
           }
 
           const after = snapshotState();
@@ -1437,6 +1556,7 @@ export default function App() {
       anchorId: null,
       startX: 0,
       startY: 0,
+      startZone: 'truck',
       bounds: null,
       itemPositions: [],
     };
@@ -1459,7 +1579,9 @@ export default function App() {
       offsetY: touch.clientY - rect.top,
     };
 
-    const shouldGroupDrag = selectedIdsRef.current.includes(caseItem.id) && selectedIdsRef.current.length > 1;
+    const shouldGroupDrag =
+      selectedIdsRef.current.includes(caseItem.id) &&
+      selectedIdsRef.current.length > 1;
 
     if (!selectedIdsRef.current.includes(caseItem.id)) {
       setSelectedIds([caseItem.id]);
@@ -1497,6 +1619,8 @@ export default function App() {
   }
 
   const displayedCases = [...cases].sort((a, b) => a.z - b.z);
+  const truckCases = displayedCases.filter((c) => (c.zone || 'truck') === 'truck');
+  const waitingCases = displayedCases.filter((c) => (c.zone || 'truck') === 'waiting');
 
   return (
     <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto">
@@ -1640,8 +1764,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="shrink-0" style={{ width: truckPixelWidth }}>
+        <div className="shrink-0" style={{ width: truckPixelWidth + waitingPixelWidth + 24 }}>
           <div className="space-y-4">
+            <div className="flex items-start gap-6">
             <div
               ref={truckRef}
               onMouseDown={(e) => {
@@ -1679,7 +1804,7 @@ export default function App() {
                 }
               }}
               onDragOver={handleTruckDragOver}
-              onDrop={handleDrop}
+              onDrop={(e) => handleDrop(e, 'truck')}
               className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
               style={{
                 width: truckPixelWidth,
@@ -1692,7 +1817,7 @@ export default function App() {
                 backgroundSize: `${scale}px ${scale}px`,
               }}
             >
-              {displayedCases.map((c) => {
+              {truckCases.map((c) => {
                 const isSelected = selectedIds.includes(c.id);
                 const hideDuringDrag =
                   draggingCaseId !== null &&
@@ -1750,7 +1875,7 @@ export default function App() {
                 );
               })}
 
-              {ghost && (
+              {ghost && ghost.zone !== 'waiting' && (
                 <div
                   className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
                   style={{
@@ -1776,139 +1901,242 @@ export default function App() {
               )}
             </div>
 
-            <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
-              <div className="flex items-center justify-between mb-3 gap-2">
-                <h3 className="text-lg font-semibold">Case Selection</h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={fetchTemplates}
-                    className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
-                  >
-                    Refresh
-                  </button>
-                  <button
-                    onClick={clearTruck}
-                    className="bg-rose-700 px-2 py-1 rounded text-sm"
-                  >
-                    Clear Truck
-                  </button>
-                </div>
+            <div
+              ref={waitingRef}
+              onClick={(e) => {
+                if (justFinishedBoxSelectRef.current) return;
+
+                if (e.target === e.currentTarget && !selectionDragRef.current.active) {
+                  setSelectedIds([]);
+                }
+              }}
+              onDragOver={handleWaitingDragOver}
+              onDrop={(e) => handleDrop(e, 'waiting')}
+              className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
+              style={{
+                width: waitingPixelWidth,
+                height: waitingPixelHeight,
+                touchAction: 'none',
+                backgroundImage: `
+                  linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
+                  linear-gradient(to bottom, rgba(148,163,184,0.14) 1px, transparent 1px)
+                `,
+                backgroundSize: `${scale}px ${scale}px`,
+              }}
+            >
+              <div className="absolute left-2 top-2 text-xs font-semibold uppercase tracking-wide text-slate-400 pointer-events-none">
+                Waiting Area
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {templates.map((t) => (
+              {waitingCases.map((c) => {
+                const isSelected = selectedIds.includes(c.id);
+                const hideDuringDrag = draggingCaseId !== null && c.id === draggingCaseId;
+
+                return (
                   <div
-                    key={t.id}
+                    key={c.id}
                     draggable
-                    onDragStart={(e) => handleTemplateDragStart(e, t)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
+                    }}
+                    onDragStart={(e) => handlePlacedCaseDragStart(e, c)}
                     onDragEnd={handleDragEnd}
-                    onTouchStart={(e) => handleTemplateTouchStart(e, t)}
-                    className="relative p-2 bg-slate-700 rounded cursor-grab"
+                    onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
+                    onDoubleClick={() => rotateSelected()}
+                    className={`absolute border-2 text-xs flex items-center justify-center ${
+                      draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'
+                    }`}
                     style={{
-                      width: '220px',
+                      left: c.x * scale,
+                      top: c.y * scale,
+                      width: c.w * scale,
+                      height: c.h * scale,
+                      zIndex: c.z,
                       touchAction: 'none',
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
+                      backgroundColor: c.color || DEFAULT_CASE_COLOR.value,
+                      borderColor: isSelected ? '#facc15' : c.borderColor || DEFAULT_CASE_COLOR.border,
+                      boxShadow: isSelected ? '0 0 0 2px rgba(250, 204, 21, 0.25)' : 'none',
+                      opacity: hideDuringDrag ? 0.08 : 1,
+                      pointerEvents: 'auto',
                     }}
                   >
-                    <input
-                      value={t.name}
-                      onChange={(e) => renameTemplate(t.id, e.target.value)}
-                      className="w-full bg-slate-900 p-1 rounded mb-1"
-                    />
-                    <div className="text-sm text-slate-300">
-                      {Number(t.length_in).toFixed(2)} L ├ù {Number(t.width_in).toFixed(2)} W in
-                    </div>
+                    {c.name}
+                    {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
 
                     <button
                       onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
-                        deleteTemplate(t.id);
+                        const before = snapshotState();
+                        setCases((prev) => prev.filter((item) => item.id !== c.id));
+                        setSelectedIds((prev) => prev.filter((id) => id !== c.id));
+                        pushHistorySnapshot(before);
                       }}
                       className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
                     >
                       X
                     </button>
                   </div>
-                ))}
-              </div>
+                );
+              })}
+
+              {ghost && ghost.zone === 'waiting' && (
+                <div
+                  className="absolute border border-dashed border-yellow-300 bg-yellow-500/20 pointer-events-none"
+                  style={{
+                    left: ghost.x * scale,
+                    top: ghost.y * scale,
+                    width: ghost.w * scale,
+                    height: ghost.h * scale,
+                  }}
+                />
+              )}
+            </div>
             </div>
 
-            {hasSelection && (
-              <div className="bg-slate-800 p-3 rounded space-y-2" style={{ width: truckPixelWidth }}>
-                <h3 className="text-lg font-semibold">
-                  {selectedCases.length === 1 ? 'Selected Case' : 'Selected Cases'}
-                </h3>
-
-                {selectedCase ? (
-                  <input
-                    value={selectedCase.name}
-                    onChange={(e) => renameSelected(e.target.value)}
-                    className="w-full bg-slate-900 p-1 rounded"
-                  />
-                ) : (
-                  <div className="rounded bg-slate-900 p-2 text-sm text-slate-300">
-                    {selectedCases.length} cases selected
-                  </div>
-                )}
-
-                <div className="text-sm text-slate-400">
-                  {selectedCase
-                    ? `Stack qty: ${selectedCase.stackCount || 1}`
-                    : `Bulk actions will apply to all ${selectedCases.length} selected cases.`}
-                </div>
-
-                <div>
-                  <div className="mb-1 text-sm text-slate-300">Case Color</div>
-                  <div className="flex flex-wrap gap-2">
-                    {CASE_COLORS.map((color) => {
-                      const isActive =
-                        selectedCases.length > 0 &&
-                        selectedCases.every((item) => (item.color || DEFAULT_CASE_COLOR.value) === color.value);
-
-                      return (
-                        <button
-                          key={color.label}
-                          onClick={() => recolorSelected(color.value)}
-                          title={color.label}
-                          className={`h-8 w-8 rounded border ${isActive ? 'border-white' : 'border-slate-500'}`}
-                          style={{ backgroundColor: color.value }}
-                        />
-                      );
-                    })}
+            <div className="flex items-start gap-6">
+              <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <h3 className="text-lg font-semibold">Case Selection</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={fetchTemplates}
+                      className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
+                    >
+                      Refresh
+                    </button>
+                    <button
+                      onClick={clearTruck}
+                      className="bg-rose-700 px-2 py-1 rounded text-sm"
+                    >
+                      Clear Truck
+                    </button>
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={rotateSelected}
-                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                  >
-                    Rotate
-                  </button>
-                  <button
-                    onClick={duplicateSelected}
-                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                  >
-                    Duplicate
-                  </button>
-                  
-                  <button
-                    onClick={() => setSelectedIds([])}
-                    className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                  >
-                    Clear Selection
-                  </button>
-                  <button
-                    onClick={removeSelected}
-                    className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
-                  >
-                    Delete
-                  </button>
+                  {templates.map((t) => (
+                    <div
+                      key={t.id}
+                      draggable
+                      onDragStart={(e) => handleTemplateDragStart(e, t)}
+                      onDragEnd={handleDragEnd}
+                      onTouchStart={(e) => handleTemplateTouchStart(e, t)}
+                      className="relative p-2 bg-slate-700 rounded cursor-grab"
+                      style={{
+                        width: '220px',
+                        touchAction: 'none',
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                      }}
+                    >
+                      <input
+                        value={t.name}
+                        onChange={(e) => renameTemplate(t.id, e.target.value)}
+                        className="w-full bg-slate-900 p-1 rounded mb-1"
+                      />
+                      <div className="text-sm text-slate-300">
+                        {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
+                      </div>
+
+                      <button
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteTemplate(t.id);
+                        }}
+                        className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                      >
+                        X
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
-            )}
+
+              <div className="bg-slate-800 p-3 rounded space-y-2" style={{ width: waitingPixelWidth }}>
+                <h3 className="text-lg font-semibold">
+                  {selectedCases.length === 1 ? 'Selected Case' : 'Selected Cases'}
+                </h3>
+
+                {hasSelection ? (
+                  <>
+                    {selectedCase ? (
+                      <input
+                        value={selectedCase.name}
+                        onChange={(e) => renameSelected(e.target.value)}
+                        className="w-full bg-slate-900 p-1 rounded"
+                      />
+                    ) : (
+                      <div className="rounded bg-slate-900 p-2 text-sm text-slate-300">
+                        {selectedCases.length} cases selected
+                      </div>
+                    )}
+
+                    <div className="text-sm text-slate-400">
+                      {selectedCase
+                        ? `Stack qty: ${selectedCase.stackCount || 1}`
+                        : `Bulk actions will apply to all ${selectedCases.length} selected cases.`}
+                    </div>
+
+                    <div>
+                      <div className="mb-1 text-sm text-slate-300">Case Color</div>
+                      <div className="flex flex-wrap gap-2">
+                        {CASE_COLORS.map((color) => {
+                          const isActive =
+                            selectedCases.length > 0 &&
+                            selectedCases.every((item) => (item.color || DEFAULT_CASE_COLOR.value) === color.value);
+
+                          return (
+                            <button
+                              key={color.label}
+                              onClick={() => recolorSelected(color.value)}
+                              title={color.label}
+                              className={`h-8 w-8 rounded border ${isActive ? 'border-white' : 'border-slate-500'}`}
+                              style={{ backgroundColor: color.value }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={rotateSelected}
+                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                      >
+                        Rotate
+                      </button>
+                      <button
+                        onClick={duplicateSelected}
+                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        onClick={() => setSelectedIds([])}
+                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+                      >
+                        Clear Selection
+                      </button>
+                      <button
+                        onClick={removeSelected}
+                        className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded bg-slate-900 p-3 text-sm text-slate-400">
+                    Select one or more cases from the truck or waiting area to edit them here.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
