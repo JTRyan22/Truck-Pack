@@ -12,6 +12,8 @@ const CASE_COLORS = [
 
 const DEFAULT_CASE_COLOR = CASE_COLORS[0];
 const MAX_HISTORY = 100;
+const TOUCH_SELECT_HOLD_MS = 220;
+const TOUCH_SELECT_MOVE_TOLERANCE = 18;
 
 export default function App() {
   const [truckPresets, setTruckPresets] = useState([]);
@@ -84,7 +86,21 @@ export default function App() {
     startY: 0,
     additive: false,
     baseSelection: [],
+    zone: 'truck',
   });
+
+  const touchSelectionRef = useRef({
+    pending: false,
+    active: false,
+    zone: 'truck',
+    touchId: null,
+    startClientX: 0,
+    startClientY: 0,
+    startX: 0,
+    startY: 0,
+  });
+
+  const touchSelectionHoldTimerRef = useRef(null);
 
   useEffect(() => {
     casesRef.current = cases;
@@ -359,9 +375,56 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function getActiveTouch(touchList) {
+      if (!touchList) return null;
+      const touchId = touchSelectionRef.current.touchId;
+      if (touchId === null) return touchList[0] || null;
+      for (let i = 0; i < touchList.length; i += 1) {
+        if (touchList[i].identifier === touchId) {
+          return touchList[i];
+        }
+      }
+      return touchList[0] || null;
+    }
+
     function handleWindowTouchMove(e) {
-      const touch = e.touches[0];
+      const touch = getActiveTouch(e.touches);
       if (!touch) return;
+
+      if (touchSelectionRef.current.pending && !touchSelectionRef.current.active) {
+        const dx = touch.clientX - touchSelectionRef.current.startClientX;
+        const dy = touch.clientY - touchSelectionRef.current.startClientY;
+        if (Math.hypot(dx, dy) > TOUCH_SELECT_MOVE_TOLERANCE) {
+          if (touchSelectionHoldTimerRef.current) {
+            clearTimeout(touchSelectionHoldTimerRef.current);
+            touchSelectionHoldTimerRef.current = null;
+          }
+          touchSelectionRef.current.pending = false;
+        }
+      }
+
+      if (touchSelectionRef.current.active) {
+        e.preventDefault();
+
+        const rect = getBoardRect(touchSelectionRef.current.zone);
+        if (!rect) return;
+
+        const currentX = clamp(touch.clientX - rect.left, 0, rect.width);
+        const currentY = clamp(touch.clientY - rect.top, 0, rect.height);
+        const nextBox = {
+          ...buildSelectionBox(
+            touchSelectionRef.current.startX,
+            touchSelectionRef.current.startY,
+            currentX,
+            currentY
+          ),
+          zone: touchSelectionRef.current.zone,
+        };
+
+        setSelectionBox(nextBox);
+        applySelectionFromBox(nextBox);
+        return;
+      }
 
       if (touchCaseDragRef.current.active) {
         e.preventDefault();
@@ -429,7 +492,49 @@ export default function App() {
       }
     }
 
+    function clearTouchSelectionState() {
+      if (touchSelectionHoldTimerRef.current) {
+        clearTimeout(touchSelectionHoldTimerRef.current);
+        touchSelectionHoldTimerRef.current = null;
+      }
+
+      touchSelectionRef.current = {
+        pending: false,
+        active: false,
+        zone: 'truck',
+        touchId: null,
+        startClientX: 0,
+        startClientY: 0,
+        startX: 0,
+        startY: 0,
+      };
+    }
+
     function handleWindowTouchEnd() {
+      if (touchSelectionRef.current.active) {
+        justFinishedBoxSelectRef.current = true;
+        selectionDragRef.current = {
+          active: false,
+          startX: 0,
+          startY: 0,
+          additive: false,
+          baseSelection: [],
+          zone: 'truck',
+        };
+        setSelectionBox(null);
+        clearTouchSelectionState();
+        setTimeout(() => {
+          justFinishedBoxSelectRef.current = false;
+        }, 0);
+        return;
+      }
+
+      if (touchSelectionRef.current.pending) {
+        setSelectedIds([]);
+        clearTouchSelectionState();
+        return;
+      }
+
       if (touchCaseDragRef.current.active) {
         finishTouchCaseDrag(touchCaseDragRef.current.caseId);
       }
@@ -437,6 +542,8 @@ export default function App() {
       if (touchTemplateDragRef.current.active) {
         finishTouchTemplateDrag();
       }
+
+      clearTouchSelectionState();
     }
 
     window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
@@ -447,23 +554,31 @@ export default function App() {
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
       window.removeEventListener('touchcancel', handleWindowTouchEnd);
+      if (touchSelectionHoldTimerRef.current) {
+        clearTimeout(touchSelectionHoldTimerRef.current);
+      }
     };
   }, [clipboard, selectedTruckId, truckPresets]);
 
   useEffect(() => {
     function handleWindowMouseMove(e) {
-      if (!selectionDragRef.current.active || !truckRef.current) return;
+      if (!selectionDragRef.current.active) return;
 
-      const rect = truckRef.current.getBoundingClientRect();
+      const rect = getBoardRect(selectionDragRef.current.zone);
+      if (!rect) return;
+
       const currentX = clamp(e.clientX - rect.left, 0, rect.width);
       const currentY = clamp(e.clientY - rect.top, 0, rect.height);
 
-      const nextBox = buildSelectionBox(
-        selectionDragRef.current.startX,
-        selectionDragRef.current.startY,
-        currentX,
-        currentY
-      );
+      const nextBox = {
+        ...buildSelectionBox(
+          selectionDragRef.current.startX,
+          selectionDragRef.current.startY,
+          currentX,
+          currentY
+        ),
+        zone: selectionDragRef.current.zone,
+      };
 
       setSelectionBox(nextBox);
       applySelectionFromBox(nextBox);
@@ -480,6 +595,7 @@ export default function App() {
         startY: 0,
         additive: false,
         baseSelection: [],
+        zone: 'truck',
       };
 
       setSelectionBox(null);
@@ -585,11 +701,11 @@ export default function App() {
     };
   }
 
-  function getIdsInsideSelectionBox(box) {
+  function getIdsInsideSelectionBox(box, zone = selectionDragRef.current.zone || 'truck') {
     if (!box) return [];
 
     return casesRef.current
-      .filter((c) => (c.zone || 'truck') === 'truck')
+      .filter((c) => (c.zone || 'truck') === zone)
       .filter((c) => {
         const left = c.x * scale;
         const top = c.y * scale;
@@ -602,7 +718,7 @@ export default function App() {
   }
 
   function applySelectionFromBox(box) {
-    const hitIds = getIdsInsideSelectionBox(box);
+    const hitIds = getIdsInsideSelectionBox(box, box?.zone || selectionDragRef.current.zone || 'truck');
 
     if (selectionDragRef.current.additive) {
       setSelectedIds(Array.from(new Set([...selectionDragRef.current.baseSelection, ...hitIds])));
@@ -610,6 +726,83 @@ export default function App() {
     }
 
     setSelectedIds(hitIds);
+  }
+
+  function getBoardRect(zone = 'truck') {
+    if (zone === 'waiting') {
+      return waitingRef.current?.getBoundingClientRect() || null;
+    }
+    return truckRef.current?.getBoundingClientRect() || null;
+  }
+
+  function startBoxSelection(zone, clientX, clientY, additive = false) {
+    const rect = getBoardRect(zone);
+    if (!rect) return false;
+
+    const startX = clamp(clientX - rect.left, 0, rect.width);
+    const startY = clamp(clientY - rect.top, 0, rect.height);
+
+    selectionDragRef.current = {
+      active: true,
+      startX,
+      startY,
+      additive,
+      baseSelection: additive ? [...selectedIdsRef.current] : [],
+      zone,
+    };
+
+    const initialBox = { ...buildSelectionBox(startX, startY, startX, startY), zone };
+    setSelectionBox(initialBox);
+
+    if (!additive) {
+      setSelectedIds([]);
+    }
+
+    return true;
+  }
+
+  function beginTouchSelectionHold(zone, event) {
+    if (event.target !== event.currentTarget || draggingCaseId !== null || draggingTemplate) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const touch = event.touches[0];
+    if (!touch) return;
+
+    if (touchSelectionHoldTimerRef.current) {
+      clearTimeout(touchSelectionHoldTimerRef.current);
+    }
+
+    touchSelectionRef.current = {
+      pending: true,
+      active: false,
+      zone,
+      touchId: touch.identifier,
+      startClientX: touch.clientX,
+      startClientY: touch.clientY,
+      startX: 0,
+      startY: 0,
+    };
+
+    touchSelectionHoldTimerRef.current = setTimeout(() => {
+      if (!touchSelectionRef.current.pending) return;
+
+      const started = startBoxSelection(
+        zone,
+        touchSelectionRef.current.startClientX,
+        touchSelectionRef.current.startClientY,
+        false
+      );
+      if (started) {
+        touchSelectionRef.current.active = true;
+        touchSelectionRef.current.pending = false;
+        touchSelectionRef.current.startX = selectionDragRef.current.startX;
+        touchSelectionRef.current.startY = selectionDragRef.current.startY;
+      }
+      touchSelectionHoldTimerRef.current = null;
+    }, TOUCH_SELECT_HOLD_MS);
   }
 
   function beginGroupDrag(anchorCase) {
@@ -883,6 +1076,7 @@ export default function App() {
       startY: 0,
       additive: false,
       baseSelection: [],
+      zone: 'truck',
     };
 
     groupDragRef.current = {
@@ -1565,6 +1759,9 @@ export default function App() {
   function handlePlacedCaseTouchStart(e, caseItem) {
     if (!selectedTruck) return;
 
+    e.preventDefault();
+    e.stopPropagation();
+
     dragStartSnapshotRef.current = snapshotState();
 
     const touch = e.touches[0];
@@ -1759,7 +1956,8 @@ export default function App() {
               <p>Drag a matching case onto the same spot to stack it.</p>
               <p>Double-click a case in the truck to rotate it.</p>
               <p>Ctrl-click or Cmd-click cases to multi-select.</p>
-              <p>Drag on empty truck space to box-select cases.</p>
+              <p>Drag on empty space to box-select cases.</p>
+              <p>On touch, hold empty space then drag to multi-select.</p>
             </div>
           </div>
         </div>
@@ -1770,29 +1968,19 @@ export default function App() {
             <div
               ref={truckRef}
               onMouseDown={(e) => {
-                if (e.target !== e.currentTarget || draggingCaseId !== null || draggingTemplate) {
-                  return;
+                if (e.target !== e.currentTarget || e.button !== 0) return;
+                startBoxSelection('truck', e.clientX, e.clientY, e.ctrlKey || e.metaKey);
+              }}
+              onTouchStart={(e) => beginTouchSelectionHold('truck', e)}
+              onTouchMove={(e) => {
+                if (touchSelectionRef.current.pending || touchSelectionRef.current.active) {
+                  e.preventDefault();
                 }
-
-                const rect = truckRef.current?.getBoundingClientRect();
-                if (!rect) return;
-
-                const startX = clamp(e.clientX - rect.left, 0, rect.width);
-                const startY = clamp(e.clientY - rect.top, 0, rect.height);
-                const additive = e.ctrlKey || e.metaKey;
-
-                selectionDragRef.current = {
-                  active: true,
-                  startX,
-                  startY,
-                  additive,
-                  baseSelection: additive ? [...selectedIds] : [],
-                };
-
-                const initialBox = buildSelectionBox(startX, startY, startX, startY);
-                setSelectionBox(initialBox);
-
-                if (!additive) {
+              }}
+              onTouchEnd={(e) => {
+                if (justFinishedBoxSelectRef.current) return;
+                if (touchSelectionRef.current.pending || touchSelectionRef.current.active) return;
+                if (e.target === e.currentTarget) {
                   setSelectedIds([]);
                 }
               }}
@@ -1828,6 +2016,7 @@ export default function App() {
                   <div
                     key={c.id}
                     draggable
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
@@ -1887,7 +2076,7 @@ export default function App() {
                 />
               )}
 
-              {selectionBox && (
+              {selectionBox && selectionBox.zone !== 'waiting' && (
                 <div
                   className="absolute pointer-events-none border border-dashed border-sky-300 bg-sky-400/15"
                   style={{
@@ -1903,6 +2092,23 @@ export default function App() {
 
             <div
               ref={waitingRef}
+              onMouseDown={(e) => {
+                if (e.target !== e.currentTarget || e.button !== 0) return;
+                startBoxSelection('waiting', e.clientX, e.clientY, e.ctrlKey || e.metaKey);
+              }}
+              onTouchStart={(e) => beginTouchSelectionHold('waiting', e)}
+              onTouchMove={(e) => {
+                if (touchSelectionRef.current.pending || touchSelectionRef.current.active) {
+                  e.preventDefault();
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (justFinishedBoxSelectRef.current) return;
+                if (touchSelectionRef.current.pending || touchSelectionRef.current.active) return;
+                if (e.target === e.currentTarget) {
+                  setSelectedIds([]);
+                }
+              }}
               onClick={(e) => {
                 if (justFinishedBoxSelectRef.current) return;
 
@@ -1936,6 +2142,7 @@ export default function App() {
                   <div
                     key={c.id}
                     draggable
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
@@ -1991,6 +2198,19 @@ export default function App() {
                     top: ghost.y * scale,
                     width: ghost.w * scale,
                     height: ghost.h * scale,
+                  }}
+                />
+              )}
+
+              {selectionBox && selectionBox.zone === 'waiting' && (
+                <div
+                  className="absolute pointer-events-none border border-dashed border-sky-300 bg-sky-400/15"
+                  style={{
+                    left: selectionBox.left,
+                    top: selectionBox.top,
+                    width: selectionBox.width,
+                    height: selectionBox.height,
+                    zIndex: 1000,
                   }}
                 />
               )}
