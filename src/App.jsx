@@ -2228,7 +2228,8 @@ lineHeight: 1,
 
 .truck-print-label span {
   color: #8b0000 !important;
-  background: rgba(160, 160, 160, 0.45) !important;
+  background-color: rgba(140, 140, 140, 0.28) !important;
+  background-image: none !important;
   display: inline-block !important;
   font-weight: 700 !important;
   padding: 1px 3px !important;
