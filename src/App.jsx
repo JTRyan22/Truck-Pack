@@ -2209,7 +2209,6 @@ lineHeight: 1,
           }
 
           .truck-print-area > div {
-            background-color: transparent !important;
             border-color: black !important;
           }
 
