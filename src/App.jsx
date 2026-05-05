@@ -2214,7 +2214,7 @@ lineHeight: 1,
           }
 
           .truck-print-label {
-            color: black !important;
+            color: red !important;
             background: transparent !important;
             border: 0 !important;
             box-shadow: none !important;
