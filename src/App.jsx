@@ -2223,8 +2223,8 @@ lineHeight: 1,
   line-height: 1 !important;
   font-size: 5.5px !important;
   font-weight: 700 !important;
-  position: absolute !important;
-  z-index: 50 !important;
+  z-index: 5 !important;
+  isolation: isolate !important;
 }
 
 .truck-print-label span {
@@ -2241,7 +2241,7 @@ lineHeight: 1,
   white-space: normal !important;
   line-height: 1 !important;
   position: relative !important;
-  z-index: 51 !important;
+  z-index: 6 !important;
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
   -webkit-box-decoration-break: clone !important;
