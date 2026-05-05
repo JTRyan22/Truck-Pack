@@ -2198,8 +2198,8 @@ lineHeight: 1,
               linear-gradient(to bottom, rgba(0,0,0,0.18) 1px, transparent 1px) !important;
             border: 2px solid black !important;
             color: black !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: economy !important;
+            print-color-adjust: economy !important;
           }
 
           .truck-print-area * {
