@@ -2198,8 +2198,8 @@ lineHeight: 1,
               linear-gradient(to bottom, rgba(0,0,0,0.18) 1px, transparent 1px) !important;
             border: 2px solid black !important;
             color: black !important;
-            -webkit-print-color-adjust: economy !important;
-            print-color-adjust: economy !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
 
           .truck-print-area * {
@@ -2238,6 +2238,10 @@ lineHeight: 1,
   max-height: none !important;
   white-space: normal !important;
   line-height: 1 !important;
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  -webkit-box-decoration-break: clone !important;
+  box-decoration-break: clone !important;
 }
 
           .truck-print-area button,
