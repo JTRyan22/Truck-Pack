@@ -1940,15 +1940,15 @@ export default function App() {
   function estimateWrappedLineCount(label, fontSize, widthPx) {
     const safeFontSize = Math.max(1, fontSize);
     const safeWidth = Math.max(8, widthPx);
-    const approxCharsPerLine = Math.max(2, Math.floor(safeWidth / (safeFontSize * 0.58)));
+    const approxCharsPerLine = Math.max(2, Math.floor(safeWidth / (safeFontSize * 0.68)));
     return Math.max(1, Math.ceil(label.length / approxCharsPerLine));
   }
 
   function getFittedLabelMetrics(label, widthPx, heightPx, overlayCount = 1) {
     const isOverlayed = overlayCount > 1;
     const maxLines = heightPx < 14 ? 1 : isOverlayed ? 2 : heightPx < 30 ? 1 : 2;
-    const maxSize = isOverlayed ? 10.5 : 13;
-    const minSize = 3;
+    const maxSize = isOverlayed ? 8.5 : 13;
+    const minSize = 2.5;
 
     for (let fontSize = maxSize; fontSize >= minSize; fontSize -= 0.5) {
       const lineCount = estimateWrappedLineCount(label, fontSize, widthPx);
@@ -2059,7 +2059,7 @@ export default function App() {
     return (
       <div
         key={`${caseItem.id}-floating-label`}
-        className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-visible rounded px-1 text-center font-semibold"
+        className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-visible rounded [px-1] text-center font-semibold"
         style={{
           left: styleInfo.left,
           top: styleInfo.top,
