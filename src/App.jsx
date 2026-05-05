@@ -14,7 +14,7 @@ const DEFAULT_CASE_COLOR = CASE_COLORS[0];
 const MAX_HISTORY = 100;
 const TOUCH_SELECT_HOLD_MS = 220;
 const TOUCH_SELECT_MOVE_TOLERANCE = 18;
-const TEMPLATE_CATEGORIES = ['TVs', 'Racks', 'Cases'];
+const TEMPLATE_CATEGORIES = ['Monitors', 'Racks', 'Video Cases', 'LED Cases'];
 const DEFAULT_TEMPLATE_CATEGORY = 'Cases';
 const ALL_TEMPLATE_CATEGORIES = ['All', ...TEMPLATE_CATEGORIES];
 
