@@ -1107,6 +1107,7 @@ export default function App() {
     setSelectedIds([]);
     pushHistorySnapshot(before);
   }
+  
   function deleteOneFromSelectedStack() {
   if (!selectedCase || (selectedCase.stackCount || 1) <= 1) return;
 
