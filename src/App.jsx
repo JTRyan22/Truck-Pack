@@ -2207,29 +2207,28 @@ export default function App() {
           .truck-print-area > div {
             background-color: transparent !important;
             border-color: black !important;
-            box-sizing: border-box !important;
           }
 
           .truck-print-label {
-            display: none !important;
-          }
-
-          .case-print-label {
-            display: flex !important;
             color: black !important;
             background: transparent !important;
             border: 0 !important;
             box-shadow: none !important;
             text-shadow: none !important;
             overflow: hidden !important;
-            white-space: normal !important;
-            word-break: break-word !important;
-            overflow-wrap: anywhere !important;
-            line-height: 1.05 !important;
-            font-size: 5.25px !important;
+            padding: 0 1px !important;
+            line-height: 1 !important;
+            font-size: 5.5px !important;
+          }
+
+          .truck-print-label span {
+            color: black !important;
+            display: block !important;
+            -webkit-line-clamp: unset !important;
+            overflow: hidden !important;
             max-height: 100% !important;
-            box-sizing: border-box !important;
-            z-index: 50000 !important;
+            white-space: normal !important;
+            line-height: 1 !important;
           }
 
           .truck-print-area button,
@@ -2476,9 +2475,6 @@ export default function App() {
                       pointerEvents: 'auto',
                     }}
                   >
-                    <span className="case-print-label hidden pointer-events-none absolute inset-0 items-center justify-center px-1 text-center font-semibold">
-                      {getCaseLabel(c)}
-                    </span>
                     {isSelected && (
                       <button
                       onTouchStart={(e) => e.stopPropagation()}
@@ -2606,9 +2602,6 @@ export default function App() {
                       pointerEvents: 'auto',
                     }}
                   >
-                    <span className="case-print-label hidden pointer-events-none absolute inset-0 items-center justify-center px-1 text-center font-semibold">
-                      {getCaseLabel(c)}
-                    </span>
                     {isSelected && (
                       <button
                       onTouchStart={(e) => e.stopPropagation()}
