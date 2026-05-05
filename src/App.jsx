@@ -2226,7 +2226,7 @@ lineHeight: 1,
           }
 
           .truck-print-label span {
-            color: black !important;
+            color: red !important;
             display: block !important;
             -webkit-line-clamp: unset !important;
             overflow: hidden !important;
