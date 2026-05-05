@@ -2075,19 +2075,23 @@ export default function App() {
           border: styleInfo.isOverlayed && styleInfo.height >= 10 ? '1px solid rgba(255,255,255,0.42)' : '0',
           textShadow: '0 1px 2px rgba(0, 0, 0, 0.95)',
           boxShadow: styleInfo.isOverlayed && styleInfo.height >= 10 ? '0 1px 2px rgba(0,0,0,0.35)' : 'none',
-          overflowWrap: 'anywhere',
-          wordBreak: 'break-word',
+          overflowWrap: 'normal',
+          wordBreak: 'normal',
         }}
         title={getCaseLabel(caseItem)}
       >
         <span
-  className="block w-full text-center"
+  className="block w-full text-center whitespace-normal"
   style={{
-    overflow: 'visible',
-    whiteSpace: 'normal',
-    wordBreak: 'break-word',
-    lineHeight: 1,
-    maxHeight: 'none',
+    display: '-webkit-box',
+WebkitBoxOrient: 'vertical',
+WebkitLineClamp: styleInfo.lineCount,
+overflow: 'hidden',
+maxHeight: '100%',
+whiteSpace: styleInfo.lineCount > 1 ? 'normal' : 'nowrap',
+wordBreak: 'normal',
+overflowWrap: 'normal',
+lineHeight: 1,
   }}
 >
   {getCaseLabel(caseItem)}
