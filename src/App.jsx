@@ -1107,6 +1107,66 @@ export default function App() {
     setSelectedIds([]);
     pushHistorySnapshot(before);
   }
+  function deleteOneFromSelectedStack() {
+  if (!selectedCase || (selectedCase.stackCount || 1) <= 1) return;
+
+  const before = snapshotState();
+
+  updateCase(selectedCase.id, (c) => ({
+    ...c,
+    stackCount: Math.max(1, (c.stackCount || 1) - 1),
+  }));
+
+  pushHistorySnapshot(before);
+}
+
+function splitSelectedStack() {
+  if (!selectedCase || (selectedCase.stackCount || 1) <= 1) return;
+
+  const before = snapshotState();
+  const stackQty = selectedCase.stackCount || 1;
+  const zone = selectedCase.zone || 'truck';
+  const area = getAreaSize(zone);
+
+  const newIds = [selectedCase.id];
+
+  setCases((prev) => {
+    let zSeed = nextZ(prev);
+
+    const splitCases = [];
+
+    for (let i = 1; i < stackQty; i += 1) {
+      const offset = i * 0.8;
+
+      const newCase = {
+        ...selectedCase,
+        id: makeLocalCaseId(),
+        stackCount: 1,
+        x: clamp(selectedCase.x + offset, 0, Math.max(0, area.width - selectedCase.w)),
+        y: clamp(selectedCase.y + offset, 0, Math.max(0, area.height - selectedCase.h)),
+        z: zSeed++,
+      };
+
+      newIds.push(newCase.id);
+      splitCases.push(newCase);
+    }
+
+    return [
+      ...prev.map((c) =>
+        c.id === selectedCase.id
+          ? {
+              ...c,
+              stackCount: 1,
+            }
+          : c
+      ),
+      ...splitCases,
+    ];
+  });
+
+  setSelectedIds(newIds);
+  pushHistorySnapshot(before);
+}
 
   function clearTruck() {
     if (casesRef.current.length === 0 && selectedIdsRef.current.length === 0) return;
@@ -2824,6 +2884,24 @@ lineHeight: 1,
                         onClick={() => setSelectedIds([])}
                         className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
                       >
+                        {selectedCase && (selectedCase.stackCount || 1) > 1 && (
+  <>
+    <button
+      onClick={splitSelectedStack}
+      className="rounded bg-amber-700 px-2 py-1 hover:bg-amber-600"
+    >
+      Split Stack
+    </button>
+
+    <button
+      onClick={deleteOneFromSelectedStack}
+      className="rounded bg-orange-700 px-2 py-1 hover:bg-orange-600"
+    >
+      Delete One
+    </button>
+  </>
+)}
+                        >
                         Clear Selection
                       </button>
                       <button
