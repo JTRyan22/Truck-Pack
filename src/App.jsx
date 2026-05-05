@@ -14,6 +14,10 @@ const DEFAULT_CASE_COLOR = CASE_COLORS[0];
 const MAX_HISTORY = 100;
 const TOUCH_SELECT_HOLD_MS = 220;
 const TOUCH_SELECT_MOVE_TOLERANCE = 18;
+const TEMPLATE_CATEGORIES = ['TVs', 'Racks', 'Cases'];
+const DEFAULT_TEMPLATE_CATEGORY = 'Cases';
+const ALL_TEMPLATE_CATEGORIES = ['All', ...TEMPLATE_CATEGORIES];
+
 
 export default function App() {
   const [truckPresets, setTruckPresets] = useState([]);
@@ -56,6 +60,9 @@ export default function App() {
   });
 
   const [templates, setTemplates] = useState([]);
+  const [selectedTemplateCategory, setSelectedTemplateCategory] = useState('All');
+  const [newTemplateCategory, setNewTemplateCategory] = useState(DEFAULT_TEMPLATE_CATEGORY);
+  const [templateCategoryOverrides, setTemplateCategoryOverrides] = useState({});
 
   const [newName, setNewName] = useState('');
   const [newW, setNewW] = useState('');
@@ -128,6 +135,29 @@ export default function App() {
       'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
     transparentDragImageRef.current = img;
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('truck-pack-template-categories');
+      if (saved) {
+        setTemplateCategoryOverrides(JSON.parse(saved));
+      }
+    } catch (error) {
+      console.warn('Could not load saved template categories:', error);
+    }
+  }, []);
+
+  function saveTemplateCategoryOverride(templateId, category) {
+    setTemplateCategoryOverrides((prev) => {
+      const next = { ...prev, [templateId]: category };
+      try {
+        window.localStorage.setItem('truck-pack-template-categories', JSON.stringify(next));
+      } catch (error) {
+        console.warn('Could not save template category locally:', error);
+      }
+      return next;
+    });
+  }
 
   function setTransparentDragImage(event) {
     if (transparentDragImageRef.current && event.dataTransfer) {
@@ -357,6 +387,7 @@ export default function App() {
     : { width: 0, height: 0 };
 
   const scale = 14;
+  const boardEdgeInsetPx = 2;
   const truckPixelWidth = Math.max(truck.width * scale, 300);
   const truckPixelHeight = Math.max(truck.height * scale, 120);
   const waitingArea = { width: Math.max(truck.width, 20), height: Math.max(truck.height, 12) };
@@ -972,6 +1003,39 @@ export default function App() {
     pushHistorySnapshot(before);
   }
 
+  function normalizeTemplateCategory(category) {
+    return TEMPLATE_CATEGORIES.includes(category) ? category : DEFAULT_TEMPLATE_CATEGORY;
+  }
+
+  function getTemplateCategory(template) {
+    return normalizeTemplateCategory(
+      templateCategoryOverrides[template.id] || template.category || DEFAULT_TEMPLATE_CATEGORY
+    );
+  }
+
+  async function updateTemplateCategory(templateId, category) {
+    const nextCategory = normalizeTemplateCategory(category);
+
+    setTemplates((prev) =>
+      prev.map((template) =>
+        template.id === templateId ? { ...template, category: nextCategory } : template
+      )
+    );
+    saveTemplateCategoryOverride(templateId, nextCategory);
+
+    const { error } = await supabase
+      .from('case_templates')
+      .update({ category: nextCategory })
+      .eq('id', templateId);
+
+    if (error) {
+      console.warn(
+        'Category saved locally, but not to Supabase. Add a category column to case_templates to sync it across devices.',
+        error
+      );
+    }
+  }
+
   async function renameTemplate(templateId, newNameValue) {
     setTemplates((prev) =>
       prev.map((template) =>
@@ -1258,18 +1322,28 @@ export default function App() {
       name: newName.trim(),
       length_in: lengthIn,
       width_in: widthIn,
+      category: normalizeTemplateCategory(newTemplateCategory),
     };
 
-    const { error } = await supabase.from('case_templates').insert([newTemplate]);
+    let { error } = await supabase.from('case_templates').insert([newTemplate]);
+
+    if (error) {
+      console.warn('Could not save template category to Supabase. Retrying without category:', error);
+      const { category, ...templateWithoutCategory } = newTemplate;
+      const retry = await supabase.from('case_templates').insert([templateWithoutCategory]);
+      error = retry.error;
+    }
 
     if (error) {
       console.error('Error adding template:', error);
       return;
     }
 
+    saveTemplateCategoryOverride(newTemplate.id, newTemplate.category);
     setNewName('');
     setNewW('');
     setNewH('');
+    setNewTemplateCategory(DEFAULT_TEMPLATE_CATEGORY);
     fetchTemplates();
   }
 
@@ -1384,9 +1458,11 @@ export default function App() {
     const rawX = (clientX - rect.left) / scale - item.w / 2;
     const rawY = (clientY - rect.top) / scale - item.h / 2;
 
+    const edgeInsetUnits = boardEdgeInsetPx / scale;
+
     return {
-      x: clamp(rawX, 0, Math.max(0, area.width - item.w)),
-      y: clamp(rawY, 0, Math.max(0, area.height - item.h)),
+      x: clamp(rawX, edgeInsetUnits, Math.max(edgeInsetUnits, area.width - item.w - edgeInsetUnits)),
+      y: clamp(rawY, edgeInsetUnits, Math.max(edgeInsetUnits, area.height - item.h - edgeInsetUnits)),
       zone,
     };
   }
@@ -1399,9 +1475,11 @@ export default function App() {
     const rawX = (clientX - rect.left - offsetX) / scale;
     const rawY = (clientY - rect.top - offsetY) / scale;
 
+    const edgeInsetUnits = boardEdgeInsetPx / scale;
+
     return {
-      x: clamp(rawX, 0, Math.max(0, area.width - item.w)),
-      y: clamp(rawY, 0, Math.max(0, area.height - item.h)),
+      x: clamp(rawX, edgeInsetUnits, Math.max(edgeInsetUnits, area.width - item.w - edgeInsetUnits)),
+      y: clamp(rawY, edgeInsetUnits, Math.max(edgeInsetUnits, area.height - item.h - edgeInsetUnits)),
       zone,
     };
   }
@@ -1819,10 +1897,349 @@ export default function App() {
   const truckCases = displayedCases.filter((c) => (c.zone || 'truck') === 'truck');
   const waitingCases = displayedCases.filter((c) => (c.zone || 'truck') === 'waiting');
 
+
+  function getCaseLabel(caseItem) {
+    return `${caseItem.name}${caseItem.stackCount > 1 ? ` x${caseItem.stackCount}` : ''}`;
+  }
+
+  function getOverlapAmount(a, b) {
+    const left = Math.max(a.x, b.x);
+    const top = Math.max(a.y, b.y);
+    const right = Math.min(a.x + a.w, b.x + b.w);
+    const bottom = Math.min(a.y + a.h, b.y + b.h);
+
+    if (right <= left || bottom <= top) return 0;
+    return (right - left) * (bottom - top);
+  }
+
+  function shouldTreatAsOverlay(a, b) {
+    if (!a || !b || a.id === b.id) return false;
+    if ((a.zone || 'truck') !== (b.zone || 'truck')) return false;
+
+    const overlapArea = getOverlapAmount(a, b);
+    if (overlapArea <= 0) return false;
+
+    const smallerArea = Math.max(0.001, Math.min(a.w * a.h, b.w * b.h));
+    return overlapArea / smallerArea >= 0.45;
+  }
+
+  function getOverlayGroup(caseItem, zoneCases) {
+    if (!caseItem) return [];
+
+    const directOverlaps = zoneCases.filter(
+      (other) => other.id === caseItem.id || shouldTreatAsOverlay(caseItem, other)
+    );
+
+    return directOverlaps.sort((a, b) => {
+      const zDiff = (b.z || 0) - (a.z || 0);
+      if (zDiff !== 0) return zDiff;
+      return String(b.id).localeCompare(String(a.id));
+    });
+  }
+
+  function estimateWrappedLineCount(label, fontSize, widthPx) {
+    const safeFontSize = Math.max(1, fontSize);
+    const safeWidth = Math.max(8, widthPx);
+    const approxCharsPerLine = Math.max(2, Math.floor(safeWidth / (safeFontSize * 0.58)));
+    return Math.max(1, Math.ceil(label.length / approxCharsPerLine));
+  }
+
+  function getFittedLabelMetrics(label, widthPx, heightPx, overlayCount = 1) {
+    const isOverlayed = overlayCount > 1;
+    const maxLines = heightPx < 14 ? 1 : isOverlayed ? 2 : heightPx < 30 ? 1 : 2;
+    const maxSize = isOverlayed ? 10.5 : 13;
+    const minSize = 4;
+
+    for (let fontSize = maxSize; fontSize >= minSize; fontSize -= 0.5) {
+      const lineCount = estimateWrappedLineCount(label, fontSize, widthPx);
+      const clampedLineCount = Math.max(1, Math.min(maxLines, lineCount));
+      const usedHeight = clampedLineCount * fontSize * 1.04;
+      if (lineCount <= maxLines && usedHeight <= heightPx) {
+        return {
+          fontSize,
+          lineCount: clampedLineCount,
+        };
+      }
+    }
+
+    return {
+      fontSize: minSize,
+      lineCount: maxLines,
+    };
+  }
+
+  function clampLabelRectToArea(caseItem, rect) {
+    const area = getAreaSize(caseItem.zone || 'truck');
+    const maxW = Math.max(1, area.width * scale);
+    const maxH = Math.max(1, area.height * scale);
+
+    const width = Math.min(Math.max(4, rect.width), maxW);
+    const height = Math.min(Math.max(4, rect.height), maxH);
+
+    return {
+      ...rect,
+      left: clamp(rect.left, 0, Math.max(0, maxW - width)),
+      top: clamp(rect.top, 0, Math.max(0, maxH - height)),
+      width,
+      height,
+    };
+  }
+
+  function getFloatingLabelStyle(caseItem, zoneCases) {
+    const group = getOverlayGroup(caseItem, zoneCases);
+    const overlayIndex = Math.max(0, group.findIndex((item) => item.id === caseItem.id));
+    const overlayCount = Math.max(1, group.length);
+    const isOverlayed = overlayCount > 1;
+    const pixelW = Math.max(1, caseItem.w * scale);
+    const pixelH = Math.max(1, caseItem.h * scale);
+    const label = getCaseLabel(caseItem);
+
+    if (!isOverlayed) {
+      const rawRect = clampLabelRectToArea(caseItem, {
+        left: caseItem.x * scale,
+        top: caseItem.y * scale,
+        width: Math.max(6, pixelW),
+        height: Math.max(6, pixelH),
+      });
+
+      const metrics = getFittedLabelMetrics(
+        label,
+        Math.max(4, rawRect.width - 4),
+        Math.max(4, rawRect.height - 3),
+        overlayCount
+      );
+
+      return {
+        ...rawRect,
+        fontSize: metrics.fontSize,
+        lineCount: metrics.lineCount,
+        zIndex: 10000 + (caseItem.z || 0),
+        isOverlayed: false,
+      };
+    }
+
+    const visibleBandCount = Math.max(1, Math.min(overlayCount, 4));
+    const gap = pixelH < 22 ? 0 : 2;
+    const maxUsableHeight = Math.max(6, pixelH - gap * (visibleBandCount - 1));
+    const bandHeight = Math.max(4, maxUsableHeight / visibleBandCount);
+    const stackHeight = bandHeight * visibleBandCount + gap * (visibleBandCount - 1);
+    const centeredStackTop = Math.max(0, (pixelH - stackHeight) / 2);
+    const topOffset = clamp(
+      centeredStackTop + overlayIndex * (bandHeight + gap),
+      0,
+      Math.max(0, pixelH - bandHeight)
+    );
+
+    const rawRect = clampLabelRectToArea(caseItem, {
+      left: caseItem.x * scale,
+      top: caseItem.y * scale + topOffset,
+      width: Math.max(6, pixelW),
+      height: bandHeight,
+    });
+
+    const metrics = getFittedLabelMetrics(
+      label,
+      Math.max(4, rawRect.width - 4),
+      Math.max(4, rawRect.height - 2),
+      overlayCount
+    );
+
+    return {
+      ...rawRect,
+      fontSize: metrics.fontSize,
+      lineCount: metrics.lineCount,
+      zIndex: 10000 + (caseItem.z || 0) + overlayIndex,
+      isOverlayed: true,
+    };
+  }
+
+  function renderFloatingCaseLabel(caseItem, zoneCases) {
+    const styleInfo = getFloatingLabelStyle(caseItem, zoneCases);
+
+    return (
+      <div
+        key={`${caseItem.id}-floating-label`}
+        className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-hidden rounded px-1 text-center font-semibold"
+        style={{
+          left: styleInfo.left,
+          top: styleInfo.top,
+          width: styleInfo.width,
+          height: styleInfo.height,
+          fontSize: styleInfo.fontSize,
+          lineHeight: 1.04,
+          zIndex: styleInfo.zIndex,
+          color: 'white',
+          backgroundColor: styleInfo.isOverlayed
+            ? 'rgba(15, 23, 42, 0.84)'
+            : 'rgba(15, 23, 42, 0.18)',
+          border: styleInfo.isOverlayed && styleInfo.height >= 10 ? '1px solid rgba(255,255,255,0.42)' : '0',
+          textShadow: '0 1px 2px rgba(0, 0, 0, 0.95)',
+          boxShadow: styleInfo.isOverlayed && styleInfo.height >= 10 ? '0 1px 2px rgba(0,0,0,0.35)' : 'none',
+          overflowWrap: 'anywhere',
+          wordBreak: 'break-word',
+        }}
+        title={getCaseLabel(caseItem)}
+      >
+        <span
+          className="block w-full whitespace-normal break-words text-center"
+          style={{
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: styleInfo.lineCount,
+            overflow: 'hidden',
+            maxHeight: '100%',
+          }}
+        >
+          {getCaseLabel(caseItem)}
+        </span>
+      </div>
+    );
+  }
+
+  function getCasesAtPoint(clientX, clientY, zoneCases, zone) {
+    const rect = getAreaRect(zone);
+    if (!rect) return [];
+
+    const x = (clientX - rect.left) / scale;
+    const y = (clientY - rect.top) / scale;
+
+    return zoneCases
+      .filter((item) => x >= item.x && x <= item.x + item.w && y >= item.y && y <= item.y + item.h)
+      .sort((a, b) => {
+        const zDiff = (b.z || 0) - (a.z || 0);
+        if (zDiff !== 0) return zDiff;
+        return String(b.id).localeCompare(String(a.id));
+      });
+  }
+
+  function handleLayeredCaseClick(event, clickedCase, zoneCases, zone) {
+    event.stopPropagation();
+
+    const hitCases = getCasesAtPoint(event.clientX, event.clientY, zoneCases, zone);
+    if (hitCases.length <= 1) {
+      handleCaseSelection(clickedCase.id, event.ctrlKey || event.metaKey);
+      return;
+    }
+
+    const hitIds = hitCases.map((item) => item.id);
+    const currentlySelectedHitIndex = hitIds.findIndex((id) => selectedIdsRef.current.includes(id));
+    const nextCase =
+      currentlySelectedHitIndex >= 0
+        ? hitCases[(currentlySelectedHitIndex + 1) % hitCases.length]
+        : hitCases[0];
+
+    if (event.ctrlKey || event.metaKey) {
+      setSelectedIds((prev) =>
+        prev.includes(nextCase.id) ? prev.filter((id) => id !== nextCase.id) : [...prev, nextCase.id]
+      );
+      return;
+    }
+
+    setSelectedIds([nextCase.id]);
+  }
+
+  const filteredTemplates = selectedTemplateCategory === 'All'
+    ? templates
+    : templates.filter((template) => getTemplateCategory(template) === selectedTemplateCategory);
+
+  const templateCategoryCounts = ALL_TEMPLATE_CATEGORIES.reduce((counts, category) => {
+    counts[category] =
+      category === 'All'
+        ? templates.length
+        : templates.filter((template) => getTemplateCategory(template) === category).length;
+    return counts;
+  }, {});
+
+
+  function printTruckGrid() {
+    window.print();
+  }
+
+
+
   return (
     <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto">
+      <style>{`
+        @media print {
+          @page {
+            size: landscape;
+            margin: 0.25in;
+          }
+
+          html, body, #root {
+            background: white !important;
+            color: black !important;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .truck-print-area,
+          .truck-print-area * {
+            visibility: visible !important;
+          }
+
+          .truck-print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            margin: 0 !important;
+            overflow: hidden !important;
+            padding-bottom: 0 !important;
+            box-sizing: border-box !important;
+            background-color: white !important;
+            background-image:
+              linear-gradient(to right, rgba(0,0,0,0.18) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(0,0,0,0.18) 1px, transparent 1px) !important;
+            border: 2px solid black !important;
+            color: black !important;
+            -webkit-print-color-adjust: economy !important;
+            print-color-adjust: economy !important;
+          }
+
+          .truck-print-area * {
+            color: black !important;
+            text-shadow: none !important;
+            box-shadow: none !important;
+          }
+
+          .truck-print-area > div {
+            background-color: transparent !important;
+            border-color: black !important;
+            box-sizing: border-box !important;
+          }
+
+          .truck-print-label {
+            display: none !important;
+          }
+
+          .case-print-label {
+            display: flex !important;
+            color: black !important;
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            text-shadow: none !important;
+            overflow: hidden !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+            line-height: 1.05 !important;
+            font-size: 5.25px !important;
+            max-height: 100% !important;
+            box-sizing: border-box !important;
+            z-index: 50000 !important;
+          }
+
+          .truck-print-area button,
+          .truck-print-hide {
+            display: none !important;
+          }
+        }
+      `}</style>
       <div className="flex gap-6 items-start min-w-max">
-        <div className="w-[240px] space-y-4 shrink-0">
+        <div className="truck-print-hide w-[240px] space-y-4 shrink-0">
           <div className="bg-slate-800 p-3 rounded">
             <h3 className="text-lg font-semibold mb-2">Pack</h3>
 
@@ -1861,6 +2278,12 @@ export default function App() {
               </button>
               <button onClick={deletePack} className="bg-rose-700 p-2 rounded">
                 Delete
+              </button>
+              <button
+                onClick={printTruckGrid}
+                className="col-span-2 bg-emerald-700 p-2 rounded"
+              >
+                Print Truck Grid
               </button>
             </div>
           </div>
@@ -1942,8 +2365,19 @@ export default function App() {
               placeholder="Width (in)"
               value={newH}
               onChange={(e) => setNewH(e.target.value)}
-              className="w-full mb-2 p-2 bg-slate-900 rounded"
+              className="w-full mb-1 p-2 bg-slate-900 rounded"
             />
+            <select
+              value={newTemplateCategory}
+              onChange={(e) => setNewTemplateCategory(e.target.value)}
+              className="w-full mb-2 p-2 bg-slate-900 rounded"
+            >
+              {TEMPLATE_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
             <button onClick={addTemplate} className="w-full bg-sky-700 p-2 rounded">
               Add
             </button>
@@ -1993,10 +2427,11 @@ export default function App() {
               }}
               onDragOver={handleTruckDragOver}
               onDrop={(e) => handleDrop(e, 'truck')}
-              className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
+              className="truck-print-area relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
               style={{
                 width: truckPixelWidth,
                 height: truckPixelHeight,
+                boxSizing: 'border-box',
                 touchAction: 'none',
                 backgroundImage: `
                   linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
@@ -2017,15 +2452,12 @@ export default function App() {
                     key={c.id}
                     draggable
                     onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
-                    }}
+                    onClick={(e) => handleLayeredCaseClick(e, c, truckCases, 'truck')}
                     onDragStart={(e) => handlePlacedCaseDragStart(e, c)}
                     onDragEnd={handleDragEnd}
                     onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
                     onDoubleClick={() => rotateSelected()}
-                    className={`absolute border-2 text-xs flex items-center justify-center ${
+                    className={`absolute border-2 flex items-center justify-center overflow-hidden ${
                       draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'
                     }`}
                     style={{
@@ -2033,7 +2465,7 @@ export default function App() {
                       top: c.y * scale,
                       width: c.w * scale,
                       height: c.h * scale,
-                      zIndex: c.z,
+                      zIndex: isSelected ? 9000 + (c.z || 0) : c.z,
                       touchAction: 'none',
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
@@ -2044,10 +2476,11 @@ export default function App() {
                       pointerEvents: 'auto',
                     }}
                   >
-                    {c.name}
-                    {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
-
-                    <button
+                    <span className="case-print-label hidden pointer-events-none absolute inset-0 items-center justify-center px-1 text-center font-semibold">
+                      {getCaseLabel(c)}
+                    </span>
+                    {isSelected && (
+                      <button
                       onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2057,12 +2490,16 @@ export default function App() {
                         pushHistorySnapshot(before);
                       }}
                       className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                      style={{ zIndex: 20000 }}
                     >
                       X
                     </button>
+                    )}
                   </div>
                 );
               })}
+
+              {truckCases.map((c) => renderFloatingCaseLabel(c, truckCases))}
 
               {ghost && ghost.zone !== 'waiting' && (
                 <div
@@ -2072,6 +2509,7 @@ export default function App() {
                     top: ghost.y * scale,
                     width: ghost.w * scale,
                     height: ghost.h * scale,
+                    boxSizing: 'border-box',
                   }}
                 />
               )}
@@ -2118,10 +2556,11 @@ export default function App() {
               }}
               onDragOver={handleWaitingDragOver}
               onDrop={(e) => handleDrop(e, 'waiting')}
-              className="relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
+              className="truck-print-hide relative border border-slate-500 bg-slate-950 overflow-hidden rounded"
               style={{
                 width: waitingPixelWidth,
                 height: waitingPixelHeight,
+                boxSizing: 'border-box',
                 touchAction: 'none',
                 backgroundImage: `
                   linear-gradient(to right, rgba(148,163,184,0.14) 1px, transparent 1px),
@@ -2143,15 +2582,12 @@ export default function App() {
                     key={c.id}
                     draggable
                     onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCaseSelection(c.id, e.ctrlKey || e.metaKey);
-                    }}
+                    onClick={(e) => handleLayeredCaseClick(e, c, waitingCases, 'waiting')}
                     onDragStart={(e) => handlePlacedCaseDragStart(e, c)}
                     onDragEnd={handleDragEnd}
                     onTouchStart={(e) => handlePlacedCaseTouchStart(e, c)}
                     onDoubleClick={() => rotateSelected()}
-                    className={`absolute border-2 text-xs flex items-center justify-center ${
+                    className={`absolute border-2 flex items-center justify-center overflow-hidden ${
                       draggingCaseId === c.id ? 'cursor-grabbing' : 'cursor-move'
                     }`}
                     style={{
@@ -2159,7 +2595,7 @@ export default function App() {
                       top: c.y * scale,
                       width: c.w * scale,
                       height: c.h * scale,
-                      zIndex: c.z,
+                      zIndex: isSelected ? 9000 + (c.z || 0) : c.z,
                       touchAction: 'none',
                       userSelect: 'none',
                       WebkitUserSelect: 'none',
@@ -2170,10 +2606,11 @@ export default function App() {
                       pointerEvents: 'auto',
                     }}
                   >
-                    {c.name}
-                    {c.stackCount > 1 ? ` x${c.stackCount}` : ''}
-
-                    <button
+                    <span className="case-print-label hidden pointer-events-none absolute inset-0 items-center justify-center px-1 text-center font-semibold">
+                      {getCaseLabel(c)}
+                    </span>
+                    {isSelected && (
+                      <button
                       onTouchStart={(e) => e.stopPropagation()}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -2183,12 +2620,16 @@ export default function App() {
                         pushHistorySnapshot(before);
                       }}
                       className="absolute top-0 right-0 text-[10px] bg-rose-700 px-1 rounded"
+                      style={{ zIndex: 20000 }}
                     >
                       X
                     </button>
+                    )}
                   </div>
                 );
               })}
+
+              {waitingCases.map((c) => renderFloatingCaseLabel(c, waitingCases))}
 
               {ghost && ghost.zone === 'waiting' && (
                 <div
@@ -2198,6 +2639,7 @@ export default function App() {
                     top: ghost.y * scale,
                     width: ghost.w * scale,
                     height: ghost.h * scale,
+                    boxSizing: 'border-box',
                   }}
                 />
               )}
@@ -2217,7 +2659,7 @@ export default function App() {
             </div>
             </div>
 
-            <div className="flex items-start gap-6">
+            <div className="truck-print-hide flex items-start gap-6">
               <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <h3 className="text-lg font-semibold">Case Selection</h3>
@@ -2237,8 +2679,25 @@ export default function App() {
                   </div>
                 </div>
 
+                <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-[180px_1fr]">
+                  <select
+                    value={selectedTemplateCategory}
+                    onChange={(e) => setSelectedTemplateCategory(e.target.value)}
+                    className="rounded bg-slate-900 p-2 text-sm"
+                  >
+                    {ALL_TEMPLATE_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category} ({templateCategoryCounts[category] || 0})
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-slate-400 self-center">
+                    Assign existing cases with the category dropdown on each card. More categories can be added later.
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap gap-2">
-                  {templates.map((t) => (
+                  {filteredTemplates.map((t) => (
                     <div
                       key={t.id}
                       draggable
@@ -2258,9 +2717,23 @@ export default function App() {
                         onChange={(e) => renameTemplate(t.id, e.target.value)}
                         className="w-full bg-slate-900 p-1 rounded mb-1"
                       />
-                      <div className="text-sm text-slate-300">
+                      <div className="text-sm text-slate-300 mb-1">
                         {Number(t.length_in).toFixed(2)} L × {Number(t.width_in).toFixed(2)} W in
                       </div>
+                      <select
+                        value={getTemplateCategory(t)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
+                        onChange={(e) => updateTemplateCategory(t.id, e.target.value)}
+                        className="w-full rounded bg-slate-900 p-1 text-xs text-slate-200"
+                      >
+                        {TEMPLATE_CATEGORIES.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
 
                       <button
                         onTouchStart={(e) => e.stopPropagation()}
@@ -2274,6 +2747,11 @@ export default function App() {
                       </button>
                     </div>
                   ))}
+                  {filteredTemplates.length === 0 && (
+                    <div className="rounded bg-slate-900 p-3 text-sm text-slate-400">
+                      No cases in this category yet. Switch to All, then assign cases to {selectedTemplateCategory}.
+                    </div>
+                  )}
                 </div>
               </div>
 
