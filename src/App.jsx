@@ -1948,7 +1948,7 @@ export default function App() {
     const isOverlayed = overlayCount > 1;
     const maxLines = heightPx < 14 ? 1 : isOverlayed ? 2 : heightPx < 30 ? 1 : 2;
     const maxSize = isOverlayed ? 10.5 : 13;
-    const minSize = 4;
+    const minSize = 3;
 
     for (let fontSize = maxSize; fontSize >= minSize; fontSize -= 0.5) {
       const lineCount = estimateWrappedLineCount(label, fontSize, widthPx);
@@ -2059,7 +2059,7 @@ export default function App() {
     return (
       <div
         key={`${caseItem.id}-floating-label`}
-        className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-hidden rounded px-1 text-center font-semibold"
+        className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-visible rounded px-1 text-center font-semibold"
         style={{
           left: styleInfo.left,
           top: styleInfo.top,
@@ -2081,17 +2081,17 @@ export default function App() {
         title={getCaseLabel(caseItem)}
       >
         <span
-          className="block w-full whitespace-normal break-words text-center"
-          style={{
-            display: '-webkit-box',
-            WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: styleInfo.lineCount,
-            overflow: 'hidden',
-            maxHeight: '100%',
-          }}
-        >
-          {getCaseLabel(caseItem)}
-        </span>
+  className="block w-full text-center"
+  style={{
+    overflow: 'visible',
+    whiteSpace: 'normal',
+    wordBreak: 'break-word',
+    lineHeight: 1,
+    maxHeight: 'none',
+  }}
+>
+  {getCaseLabel(caseItem)}
+</span>
       </div>
     );
   }
