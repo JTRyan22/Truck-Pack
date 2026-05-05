@@ -2214,26 +2214,31 @@ lineHeight: 1,
           }
 
           .truck-print-label {
-            color: red !important;
-            background: transparent !important;
-            border: 0 !important;
-            box-shadow: none !important;
-            text-shadow: none !important;
-            overflow: hidden !important;
-            padding: 0 1px !important;
-            line-height: 1 !important;
-            font-size: 5.5px !important;
-          }
+  color: #8b0000 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  overflow: visible !important;
+  padding: 0 1px !important;
+  line-height: 1 !important;
+  font-size: 5.5px !important;
+  font-weight: 700 !important;
+}
 
-          .truck-print-label span {
-            color: red !important;
-            display: block !important;
-            -webkit-line-clamp: unset !important;
-            overflow: hidden !important;
-            max-height: 100% !important;
-            white-space: normal !important;
-            line-height: 1 !important;
-          }
+.truck-print-label span {
+  color: #8b0000 !important;
+  background: rgba(160, 160, 160, 0.45) !important;
+  display: inline-block !important;
+  font-weight: 700 !important;
+  padding: 1px 3px !important;
+  border-radius: 2px !important;
+  -webkit-line-clamp: unset !important;
+  overflow: visible !important;
+  max-height: none !important;
+  white-space: normal !important;
+  line-height: 1 !important;
+}
 
           .truck-print-area button,
           .truck-print-hide {
