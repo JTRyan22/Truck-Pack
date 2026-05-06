@@ -136,6 +136,26 @@ export default function App() {
   };
 }, []);
 
+useEffect(() => {
+  const handleShiftWheel = (e) => {
+    if (!e.shiftKey) return;
+
+    e.preventDefault();
+
+    window.scrollBy({
+      left: e.deltaY,
+      top: 0,
+      behavior: 'auto',
+    });
+  };
+
+  window.addEventListener('wheel', handleShiftWheel, { passive: false });
+
+  return () => {
+    window.removeEventListener('wheel', handleShiftWheel);
+  };
+}, []);
+
   useEffect(() => {
     casesRef.current = cases;
   }, [cases]);
@@ -2959,27 +2979,4 @@ lineHeight: 1,
       </div>
     </div>
   );
-{floatingScrollMax > 0 && (
-  <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-cyan-400/40 bg-slate-950/95 px-3 py-2">
-    <input
-      type="range"
-      min="0"
-      max={floatingScrollMax}
-      value={floatingScrollLeft}
-      onChange={(e) => {
-        const nextLeft = Number(e.target.value);
-        setFloatingScrollLeft(nextLeft);
-
-        window.scrollTo({
-          left: nextLeft,
-          top: window.scrollY,
-          behavior: 'auto',
-        });
-      }}
-      className="w-full accent-cyan-400"
-      aria-label="Horizontal page scroll"
-    />
-  </div>
-);
-}
 }
