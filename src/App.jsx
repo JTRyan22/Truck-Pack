@@ -27,7 +27,8 @@ export default function App() {
   const [customTruckWidth, setCustomTruckWidth] = useState('');
   const [floatingScrollLeft, setFloatingScrollLeft] = useState(0);
   const [floatingScrollMax, setFloatingScrollMax] = useState(0);
-  
+  const appScrollRef = useRef(null);
+
   const [cases, setCases] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [draggingTemplate, setDraggingTemplate] = useState(null);
@@ -140,19 +141,21 @@ useEffect(() => {
   const handleShiftWheel = (e) => {
     if (!e.shiftKey) return;
 
+    const scrollContainer = appScrollRef.current;
+    if (!scrollContainer) return;
+
     e.preventDefault();
 
-    window.scrollBy({
-      left: e.deltaY,
-      top: 0,
-      behavior: 'auto',
-    });
+    scrollContainer.scrollLeft += e.deltaY;
   };
 
-  window.addEventListener('wheel', handleShiftWheel, { passive: false });
+  const scrollContainer = appScrollRef.current;
+  if (!scrollContainer) return;
+
+  scrollContainer.addEventListener('wheel', handleShiftWheel, { passive: false });
 
   return () => {
-    window.removeEventListener('wheel', handleShiftWheel);
+    scrollContainer.removeEventListener('wheel', handleShiftWheel);
   };
 }, []);
 
@@ -2273,7 +2276,10 @@ lineHeight: 1,
 
 
   return (
-    <div className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto">
+    <div
+  ref={appScrollRef}
+  className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto"
+>
       <style>{`
         @media print {
           @page {
