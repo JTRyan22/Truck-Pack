@@ -2284,7 +2284,7 @@ lineHeight: 1,
         @media print {
           @page {
             size: landscape;
-            margin: 0.15in;
+            margin: 0.25in;
           }
 
           html, body, #root {
