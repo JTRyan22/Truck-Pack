@@ -2317,6 +2317,10 @@ lineHeight: 1,
             color: black !important;
             -webkit-print-color-adjust: economy !important;
             print-color-adjust: economy !important;
+            width: 100vw !important;
+            max-width: none !important;
+            transform: scale(1.35) !important;
+            transform-origin: top left !important;
           }
 
           .truck-print-area * {
