@@ -2888,7 +2888,7 @@ lineHeight: 1,
     <button
       type="button"
       onClick={splitSelectedStack}
-      className="rounded bg-amber-700 px-2 py-1 hover:bg-amber-600"
+      className="rounded bg-slate-700 px-2 py-1 hover:bg-amber-600"
     >
       Split Stack
     </button>
@@ -2896,7 +2896,7 @@ lineHeight: 1,
     <button
       type="button"
       onClick={deleteOneFromSelectedStack}
-      className="rounded bg-orange-700 px-2 py-1 hover:bg-orange-600"
+      className="rounded bg-slate-700 px-2 py-1 hover:bg-orange-600"
     >
       Delete One
     </button>
