@@ -2337,8 +2337,8 @@ lineHeight: 1,
   text-shadow: none !important;
   overflow: visible !important;
   padding: 0 1px !important;
-  line-height: 1 !important;
-  font-size: 5.5px !important;
+  line-height: 1.1 !important;
+  font-size: 8px !important;
   font-weight: 700 !important;
 }
 
