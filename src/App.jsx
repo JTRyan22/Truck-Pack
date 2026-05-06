@@ -2338,7 +2338,7 @@ lineHeight: 1,
   overflow: visible !important;
   padding: 0 1px !important;
   line-height: 1.1 !important;
-  font-size: 12px !important;
+  font-size: 8px !important;
   font-weight: 700 !important;
 }
 
