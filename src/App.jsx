@@ -2868,26 +2868,25 @@ lineHeight: 1,
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={rotateSelected}
-                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                      >
-                        Rotate
-                      </button>
-                      <button
-                        onClick={duplicateSelected}
-                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        onClick={() => setSelectedIds([])}
-                        className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
-                      >
-                        {selectedCase && (selectedCase.stackCount || 1) > 1 && (
+<button
+  type="button"
+  onClick={rotateSelected}
+  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+>
+  Rotate
+</button>
+
+<button
+  onClick={duplicateSelected}
+  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+>
+  Duplicate
+</button>
+
+{selectedCase && (selectedCase.stackCount || 1) > 1 && (
   <>
     <button
+      type="button"
       onClick={splitSelectedStack}
       className="rounded bg-amber-700 px-2 py-1 hover:bg-amber-600"
     >
@@ -2895,6 +2894,7 @@ lineHeight: 1,
     </button>
 
     <button
+      type="button"
       onClick={deleteOneFromSelectedStack}
       className="rounded bg-orange-700 px-2 py-1 hover:bg-orange-600"
     >
@@ -2902,17 +2902,51 @@ lineHeight: 1,
     </button>
   </>
 )}
-                        >
-                        Clear Selection
-                      </button>
-                      <button
-                        onClick={removeSelected}
-                        className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </>
+
+<button
+  type="button"
+  onClick={duplicateSelected}
+  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+>
+  Duplicate
+</button>
+
+{selectedCase && Number(selectedCase.stackCount || 1) > 1 ? (
+  <>
+    <button
+      type="button"
+      onClick={splitSelectedStack}
+      className="rounded bg-amber-700 px-2 py-1 hover:bg-amber-600"
+    >
+      Split Stack
+    </button>
+
+    <button
+      type="button"
+      onClick={deleteOneFromSelectedStack}
+      className="rounded bg-orange-700 px-2 py-1 hover:bg-orange-600"
+    >
+      Delete One
+    </button>
+  </>
+) : null}
+
+<button
+  type="button"
+  onClick={() => setSelectedIds([])}
+  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
+>
+  Clear Selection
+</button>
+
+<button
+  type="button"
+  onClick={removeSelected}
+  className="rounded bg-rose-700 px-2 py-1 hover:bg-rose-600"
+>
+  Delete
+</button>
+                    </>
                 ) : (
                   <div className="rounded bg-slate-900 p-3 text-sm text-slate-400">
                     Select one or more cases from the truck or waiting area to edit them here.
