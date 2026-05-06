@@ -2908,34 +2908,7 @@ lineHeight: 1,
   onClick={duplicateSelected}
   className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
 >
-  Duplicate
-</button>
-
-{selectedCase && Number(selectedCase.stackCount || 1) > 1 ? (
-  <>
-    <button
-      type="button"
-      onClick={splitSelectedStack}
-      className="rounded bg-amber-700 px-2 py-1 hover:bg-amber-600"
-    >
-      Split Stack
-    </button>
-
-    <button
-      type="button"
-      onClick={deleteOneFromSelectedStack}
-      className="rounded bg-orange-700 px-2 py-1 hover:bg-orange-600"
-    >
-      Delete One
-    </button>
-  </>
-) : null}
-
-<button
-  type="button"
-  onClick={() => setSelectedIds([])}
-  className="rounded bg-slate-700 px-2 py-1 hover:bg-slate-600"
->
+ 
   Clear Selection
 </button>
 
