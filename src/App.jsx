@@ -1622,23 +1622,26 @@ function splitSelectedStack() {
   }
 
   function findStackTarget(item, pos, ignoreId = null) {
-    return (
-      casesRef.current.find((c) => {
-        if ((c.zone || 'truck') !== 'truck') return false;
-        if (ignoreId && c.id === ignoreId) return false;
-        return (
-          c.name === item.name &&
-          Math.abs(c.x - pos.x) < 0.75 &&
-          Math.abs(c.y - pos.y) < 0.75
-        );
-      }) || null
-    );
-  }
+  const targetZone = pos.zone || item.zone || 'truck';
+
+  return (
+    casesRef.current.find((c) => {
+      if ((c.zone || 'truck') !== targetZone) return false;
+      if (ignoreId && c.id === ignoreId) return false;
+
+      return (
+        c.name === item.name &&
+        Math.abs(c.x - pos.x) < 0.75 &&
+        Math.abs(c.y - pos.y) < 0.75
+      );
+    }) || null
+  );
+}
 
   function finishCaseMove(caseId, caseSnapshot = null) {
     const dragged = caseSnapshot || casesRef.current.find((c) => c.id === caseId);
 
-    if (dragged && (dragged.zone || 'truck') === 'truck') {
+    if (dragged) { 
       const target = findStackTarget(dragged, { x: dragged.x, y: dragged.y }, caseId);
 
       if (target) {
@@ -1680,7 +1683,7 @@ function splitSelectedStack() {
 
     const before = snapshotState();
 
-    const target = pos.zone === 'truck' ? findStackTarget(templateSnapshot, pos) : null;
+    const target = findStackTarget(templateSnapshot, pos);
     if (target) {
       updateCase(target.id, (c) => ({
         ...c,
