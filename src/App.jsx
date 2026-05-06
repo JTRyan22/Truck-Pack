@@ -25,8 +25,8 @@ export default function App() {
   const [customTruckName, setCustomTruckName] = useState('');
   const [customTruckLength, setCustomTruckLength] = useState('');
   const [customTruckWidth, setCustomTruckWidth] = useState('');
-  const floatingHorizontalScrollRef = useRef(null);
-  const [floatingScrollWidth, setFloatingScrollWidth] = useState(0);
+  const [floatingScrollLeft, setFloatingScrollLeft] = useState(0);
+  const [floatingScrollMax, setFloatingScrollMax] = useState(0);
   
   const [cases, setCases] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -112,36 +112,26 @@ export default function App() {
   const touchSelectionHoldTimerRef = useRef(null);
 
   useEffect(() => {
-  const updateScrollWidth = () => {
-    const width = Math.max(
-      document.documentElement.scrollWidth,
-      document.body.scrollWidth,
-      window.innerWidth
+  const updateFloatingScroll = () => {
+    const max = Math.max(
+      0,
+      document.documentElement.scrollWidth - window.innerWidth
     );
 
-    setFloatingScrollWidth(width);
+    setFloatingScrollMax(max);
+    setFloatingScrollLeft(window.scrollX || 0);
   };
 
-  const syncFromWindow = () => {
-    const bar = floatingHorizontalScrollRef.current;
-    if (!bar) return;
+  updateFloatingScroll();
 
-    if (Math.abs(bar.scrollLeft - window.scrollX) > 1) {
-      bar.scrollLeft = window.scrollX;
-    }
-  };
+  window.addEventListener('resize', updateFloatingScroll);
+  window.addEventListener('scroll', updateFloatingScroll, { passive: true });
 
-  updateScrollWidth();
-  syncFromWindow();
-
-  window.addEventListener('resize', updateScrollWidth);
-  window.addEventListener('scroll', syncFromWindow, { passive: true });
-
-  const timer = window.setInterval(updateScrollWidth, 500);
+  const timer = window.setInterval(updateFloatingScroll, 500);
 
   return () => {
-    window.removeEventListener('resize', updateScrollWidth);
-    window.removeEventListener('scroll', syncFromWindow);
+    window.removeEventListener('resize', updateFloatingScroll);
+    window.removeEventListener('scroll', updateFloatingScroll);
     window.clearInterval(timer);
   };
 }, []);
@@ -2969,17 +2959,27 @@ lineHeight: 1,
       </div>
     </div>
   );
-<div
-  className="fixed bottom-0 left-0 right-0 z-50 h-5 overflow-x-auto overflow-y-hidden bg-slate-950/90"
-  ref={floatingHorizontalScrollRef}
-  onScroll={(e) => {
-    window.scrollTo({
-      left: e.currentTarget.scrollLeft,
-      top: window.scrollY,
-      behavior: 'auto',
-    });
-  }}
->
-  <div style={{ width: floatingScrollWidth, height: 1 }} />
-</div>
+{floatingScrollMax > 0 && (
+  <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-cyan-400/40 bg-slate-950/95 px-3 py-2">
+    <input
+      type="range"
+      min="0"
+      max={floatingScrollMax}
+      value={floatingScrollLeft}
+      onChange={(e) => {
+        const nextLeft = Number(e.target.value);
+        setFloatingScrollLeft(nextLeft);
+
+        window.scrollTo({
+          left: nextLeft,
+          top: window.scrollY,
+          behavior: 'auto',
+        });
+      }}
+      className="w-full accent-cyan-400"
+      aria-label="Horizontal page scroll"
+    />
+  </div>
+);
+}
 }
