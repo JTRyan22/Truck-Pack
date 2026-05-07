@@ -2336,8 +2336,8 @@ lineHeight: 1,
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95) !important;
   overflow: visible !important;
   padding: 0 1px !important;
-  line-height: 1.05 !important;
-  font-size: 8px !important;
+  line-height: 1.1 !important;
+  font-size: 14px !important;
   font-weight: 700 !important;
 }
 
@@ -2347,14 +2347,14 @@ lineHeight: 1,
   background-image: none !important;
   display: inline-block !important;
   font-weight: 700 !important;
-  padding: 1px 4px !important;
+  padding: 2px 6px !important;
   border-radius: 3px !important;
   -webkit-line-clamp: unset !important;
   overflow: visible !important;
   max-height: none !important;
   white-space: normal !important;
-  line-height: 1.05 !important;
-  font-size: 8px !important;
+  line-height: 1.1 !important;
+  font-size: 14px !important;
   -webkit-print-color-adjust: exact !important;
   print-color-adjust: exact !important;
   -webkit-box-decoration-break: clone !important;
