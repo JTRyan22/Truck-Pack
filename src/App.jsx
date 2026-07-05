@@ -28,6 +28,10 @@ export default function App() {
   const [floatingScrollLeft, setFloatingScrollLeft] = useState(0);
   const [floatingScrollMax, setFloatingScrollMax] = useState(0);
   const appScrollRef = useRef(null);
+  
+  const [appScale, setAppScale] = useState(1);
+  const pinchStartDistanceRef = useRef(null);
+  const pinchStartScaleRef = useRef(1);
 
   const [cases, setCases] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -2273,12 +2277,66 @@ lineHeight: 1,
     window.print();
   }
 
+function getPinchDistance(touches) {
+  const touch1 = touches[0];
+  const touch2 = touches[1];
 
+  return Math.hypot(
+    touch2.clientX - touch1.clientX,
+    touch2.clientY - touch1.clientY
+  );
+}
+
+function handleAppTouchStart(event) {
+  if (event.touches.length !== 2) return;
+
+  pinchStartDistanceRef.current = getPinchDistance(event.touches);
+  pinchStartScaleRef.current = appScale;
+}
+
+function handleAppTouchMove(event) {
+  if (
+    event.touches.length !== 2 ||
+    !pinchStartDistanceRef.current
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const currentDistance = getPinchDistance(event.touches);
+  const pinchRatio =
+    currentDistance / pinchStartDistanceRef.current;
+
+  const nextScale =
+    pinchStartScaleRef.current * pinchRatio;
+
+  const limitedScale = Math.min(
+    1.5,
+    Math.max(0.4, nextScale)
+  );
+
+  setAppScale(limitedScale);
+}
+
+function handleAppTouchEnd(event) {
+  if (event.touches.length < 2) {
+    pinchStartDistanceRef.current = null;
+  }
+}
 
   return (
-    <div
+  <div
   ref={appScrollRef}
+  onTouchStartCapture={handleAppTouchStart}
+  onTouchMoveCapture={handleAppTouchMove}
+  onTouchEndCapture={handleAppTouchEnd}
+  onTouchCancelCapture={handleAppTouchEnd}
   className="min-h-screen w-full bg-slate-950 text-white p-6 overflow-x-auto overflow-y-auto"
+  style={{
+    zoom: appScale,
+    touchAction: 'none',
+  }}
 >
       <style>{`
         @media print {
