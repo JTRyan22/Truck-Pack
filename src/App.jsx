@@ -474,6 +474,26 @@ useEffect(() => {
     }
 
     function handleWindowTouchMove(e) {
+  if (e.touches.length >= 2) {
+    touchTemplateDragRef.current = {
+      active: false,
+      pending: false,
+      template: null,
+      offsetX: 0,
+      offsetY: 0,
+      grabRatioX: 0,
+      grabRatioY: 0,
+      startX: 0,
+      startY: 0,
+      lastPos: null,
+    };
+
+    setDraggingTemplate(null);
+    setTouchTemplatePreview(null);
+    setGhost(null);
+
+    return;
+  }
       const touch = getActiveTouch(e.touches);
       if (!touch) return;
 
