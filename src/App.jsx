@@ -2408,19 +2408,21 @@ useEffect(() => {
       <div
         className="fixed pointer-events-none border-2 border-yellow-300 bg-yellow-500/20 rounded"
         style={{
-          left:
-            touchTemplatePreview.clientX -
-            touchTemplatePreview.offsetX,
-          top:
-            touchTemplatePreview.clientY -
-            touchTemplatePreview.offsetY,
-          width:
-            touchTemplatePreview.template.w * 6,
-          height:
-            touchTemplatePreview.template.h * 6,
-          zIndex: 99999,
-          boxSizing: 'border-box',
-        }}
+  left:
+    (touchTemplatePreview.clientX -
+      touchTemplatePreview.offsetX) /
+    appScale,
+  top:
+    (touchTemplatePreview.clientY -
+      touchTemplatePreview.offsetY) /
+    appScale,
+  width:
+    touchTemplatePreview.template.w * 6,
+  height:
+    touchTemplatePreview.template.h * 6,
+  zIndex: 99999,
+  boxSizing: 'border-box',
+}}
       />
     )}
       <style>{`
