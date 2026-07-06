@@ -557,24 +557,48 @@ useEffect(() => {
         return;
       }
 
-      if (touchTemplateDragRef.current.active) {
-        e.preventDefault();
+      if (
+  touchTemplateDragRef.current.pending ||
+  touchTemplateDragRef.current.active
+) {
+  const dragState = touchTemplateDragRef.current;
+  const template = dragState.template;
 
-        const template = touchTemplateDragRef.current.template;
-        if (!template) return;
+  if (!template) return;
 
-        const pos = getDragPosition(
-          touch.clientX,
-          touch.clientY,
-          template,
-          'truck',
-          touchTemplateDragRef.current.offsetX,
-          touchTemplateDragRef.current.offsetY
-        );
+  if (dragState.pending) {
+    const distanceMoved = Math.hypot(
+      touch.clientX - dragState.startX,
+      touch.clientY - dragState.startY
+    );
 
-        touchTemplateDragRef.current.lastPos = pos;
-        setGhost(pos ? { ...template, stackCount: 1, ...pos } : null);
-      }
+    if (distanceMoved < 10) {
+      return;
+    }
+
+    dragState.pending = false;
+    dragState.active = true;
+
+    setDraggingTemplate(template);
+  }
+
+  e.preventDefault();
+
+  const pos = getDragPosition(
+    touch.clientX,
+    touch.clientY,
+    template,
+    'truck',
+    dragState.offsetX,
+    dragState.offsetY
+  );
+
+  dragState.lastPos = pos;
+
+  setGhost(
+    pos ? { ...template, stackCount: 1, ...pos } : null
+  );
+}
     }
 
     function clearTouchSelectionState() {
@@ -625,8 +649,22 @@ useEffect(() => {
       }
 
       if (touchTemplateDragRef.current.active) {
-        finishTouchTemplateDrag();
-      }
+  finishTouchTemplateDrag();
+} else if (touchTemplateDragRef.current.pending) {
+  touchTemplateDragRef.current = {
+    active: false,
+    pending: false,
+    template: null,
+    offsetX: 0,
+    offsetY: 0,
+    startX: 0,
+    startY: 0,
+    lastPos: null,
+  };
+
+  setDraggingTemplate(null);
+  setGhost(null);
+}
 
       clearTouchSelectionState();
     }
@@ -1741,15 +1779,18 @@ function splitSelectedStack() {
     );
 
     touchTemplateDragRef.current = {
-      active: true,
-      template: dragTemplate,
-      offsetX,
-      offsetY,
-      lastPos: pos,
-    };
+  active: false,
+  pending: true,
+  template: dragTemplate,
+  offsetX,
+  offsetY,
+  startX: touch.clientX,
+  startY: touch.clientY,
+  lastPos: null,
+};
 
-    setDraggingTemplate(dragTemplate);
-    setGhost(pos ? { ...dragTemplate, stackCount: 1, ...pos } : null);
+setDraggingTemplate(null);
+setGhost(null);
   }
 
   function finishTouchTemplateDrag() {
