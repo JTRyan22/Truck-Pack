@@ -597,38 +597,55 @@ const caseOffsetX =
 const caseOffsetY =
   scaledCaseHeight * dragState.grabRatioY;
 
-const pos = getDragPosition(
-  touch.clientX,
-  touch.clientY,
+const truckRect =
+  truckRef.current?.getBoundingClientRect();
+
+const waitingRect =
+  waitingRef.current?.getBoundingClientRect();
+
+function isTouchInside(rect) {
+  return (
+    rect &&
+    touch.clientX >= rect.left &&
+    touch.clientX <= rect.right &&
+    touch.clientY >= rect.top &&
+    touch.clientY <= rect.bottom
+  );
+}
+
+let targetZone = null;
+
+if (isTouchInside(truckRect)) {
+  targetZone = 'truck';
+} else if (isTouchInside(waitingRect)) {
+  targetZone = 'waiting';
+}
+
+const pos = targetZone
+  ? getAreaPositionFromTopLeft(
+      touch.clientX,
+      touch.clientY,
+      template,
+      caseOffsetX,
+      caseOffsetY,
+      targetZone
+    )
+  : null;
+
+dragState.lastPos = pos;
+
+setTouchTemplatePreview({
   template,
-  'truck',
-  caseOffsetX,
-  caseOffsetY
-);
+  clientX: touch.clientX,
+  clientY: touch.clientY,
+  grabRatioX: dragState.grabRatioX,
+  grabRatioY: dragState.grabRatioY,
+});
 
-  dragState.lastPos = pos;
-
-if (pos) {
-  setTouchTemplatePreview(null);
-
-  setGhost({
-    ...template,
-    stackCount: 1,
-    ...pos,
-  });
-} else {
-  setTouchTemplatePreview({
-    template,
-    clientX: touch.clientX,
-    clientY: touch.clientY,
-    grabRatioX: dragState.grabRatioX,
-    grabRatioY: dragState.grabRatioY,
-  });
-
-  setGhost(null);
+setGhost(null);
 }
     }
-  }
+  
 
     function clearTouchSelectionState() {
       if (touchSelectionHoldTimerRef.current) {
