@@ -785,7 +785,7 @@ setGhost(null);
         clearTimeout(touchSelectionHoldTimerRef.current);
       }
     };
-  }, [clipboard, selectedTruckId, truckPresets]);
+  }, [clipboard, selectedTruckId, truckPresets, appScale]);
 
   useEffect(() => {
     function handleWindowMouseMove(e) {
