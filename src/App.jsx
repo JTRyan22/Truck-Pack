@@ -596,19 +596,27 @@ useEffect(() => {
 
   dragState.lastPos = pos;
 
-setTouchTemplatePreview({
-  template,
-  clientX: touch.clientX,
-  clientY: touch.clientY,
-  offsetX: dragState.offsetX,
-  offsetY: dragState.offsetY,
-});
+if (pos) {
+  setTouchTemplatePreview(null);
 
-setGhost(
-  pos ? { ...template, stackCount: 1, ...pos } : null
-);
+  setGhost({
+    ...template,
+    stackCount: 1,
+    ...pos,
+  });
+} else {
+  setTouchTemplatePreview({
+    template,
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    offsetX: dragState.offsetX,
+    offsetY: dragState.offsetY,
+  });
+
+  setGhost(null);
 }
     }
+  }
 
     function clearTouchSelectionState() {
       if (touchSelectionHoldTimerRef.current) {
