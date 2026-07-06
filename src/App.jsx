@@ -2643,6 +2643,13 @@ height:
       />
     )}
       <style>{`
+        html,
+  body,
+  #root {
+    margin: 0;
+    min-height: 100%;
+    background: rgb(2, 6, 23);
+  }
         @media print {
           @page {
           margin: 0.25in;
