@@ -665,7 +665,7 @@ setGhost(null);
       };
     }
 
-    function handleWindowTouchEnd() {
+    function handleWindowTouchEnd(e) {
       if (touchSelectionRef.current.active) {
         justFinishedBoxSelectRef.current = true;
         selectionDragRef.current = {
@@ -695,8 +695,64 @@ setGhost(null);
       }
 
       if (touchTemplateDragRef.current.active) {
+  const touch = e.changedTouches?.[0];
+  const dragState = touchTemplateDragRef.current;
+  const template = dragState.template;
+
+  if (touch && template) {
+    const scaledCaseWidth =
+      template.w * scale * appScale;
+
+    const scaledCaseHeight =
+      template.h * scale * appScale;
+
+    const caseOffsetX =
+      scaledCaseWidth * dragState.grabRatioX;
+
+    const caseOffsetY =
+      scaledCaseHeight * dragState.grabRatioY;
+
+    const truckRect =
+      truckRef.current?.getBoundingClientRect();
+
+    const waitingRect =
+      waitingRef.current?.getBoundingClientRect();
+
+    let targetZone = null;
+
+    if (
+      truckRect &&
+      touch.clientX >= truckRect.left &&
+      touch.clientX <= truckRect.right &&
+      touch.clientY >= truckRect.top &&
+      touch.clientY <= truckRect.bottom
+    ) {
+      targetZone = 'truck';
+    } else if (
+      waitingRect &&
+      touch.clientX >= waitingRect.left &&
+      touch.clientX <= waitingRect.right &&
+      touch.clientY >= waitingRect.top &&
+      touch.clientY <= waitingRect.bottom
+    ) {
+      targetZone = 'waiting';
+    }
+
+    dragState.lastPos = targetZone
+      ? getAreaPositionFromTopLeft(
+          touch.clientX,
+          touch.clientY,
+          template,
+          caseOffsetX,
+          caseOffsetY,
+          targetZone
+        )
+      : null;
+  }
+
   finishTouchTemplateDrag();
   setTouchTemplatePreview(null);
+
 } else if (touchTemplateDragRef.current.pending) {
   touchTemplateDragRef.current = {
     active: false,
