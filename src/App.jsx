@@ -38,6 +38,7 @@ export default function App() {
   const [draggingTemplate, setDraggingTemplate] = useState(null);
   const [draggingCaseId, setDraggingCaseId] = useState(null);
   const [ghost, setGhost] = useState(null);
+  const [touchTemplatePreview, setTouchTemplatePreview] = useState(null);
   const [selectionBox, setSelectionBox] = useState(null);
 
   const [historyPast, setHistoryPast] = useState([]);
@@ -595,9 +596,17 @@ useEffect(() => {
 
   dragState.lastPos = pos;
 
-  setGhost(
-    pos ? { ...template, stackCount: 1, ...pos } : null
-  );
+setTouchTemplatePreview({
+  template,
+  clientX: touch.clientX,
+  clientY: touch.clientY,
+  offsetX: dragState.offsetX,
+  offsetY: dragState.offsetY,
+});
+
+setGhost(
+  pos ? { ...template, stackCount: 1, ...pos } : null
+);
 }
     }
 
@@ -650,6 +659,7 @@ useEffect(() => {
 
       if (touchTemplateDragRef.current.active) {
   finishTouchTemplateDrag();
+  setTouchTemplatePreview(null);
 } else if (touchTemplateDragRef.current.pending) {
   touchTemplateDragRef.current = {
     active: false,
@@ -664,6 +674,7 @@ useEffect(() => {
 
   setDraggingTemplate(null);
   setGhost(null);
+  setTouchTemplatePreview(null);
 }
 
       clearTouchSelectionState();
@@ -2393,6 +2404,25 @@ useEffect(() => {
     zoom: appScale,
   }}
 >
+    {touchTemplatePreview && (
+      <div
+        className="fixed pointer-events-none border-2 border-yellow-300 bg-yellow-500/20 rounded"
+        style={{
+          left:
+            touchTemplatePreview.clientX -
+            touchTemplatePreview.offsetX,
+          top:
+            touchTemplatePreview.clientY -
+            touchTemplatePreview.offsetY,
+          width:
+            touchTemplatePreview.template.w * 6,
+          height:
+            touchTemplatePreview.template.h * 6,
+          zIndex: 99999,
+          boxSizing: 'border-box',
+        }}
+      />
+    )}
       <style>{`
         @media print {
           @page {
