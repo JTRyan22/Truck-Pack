@@ -462,18 +462,42 @@ useEffect(() => {
 
   useEffect(() => {
     function getActiveTouch(touchList) {
-      if (!touchList) return null;
-      const touchId = touchSelectionRef.current.touchId;
-      if (touchId === null) return touchList[0] || null;
-      for (let i = 0; i < touchList.length; i += 1) {
-        if (touchList[i].identifier === touchId) {
-          return touchList[i];
-        }
-      }
-      return touchList[0] || null;
-    }
+  if (!touchList) return null;
+  const touchId = touchSelectionRef.current.touchId;
+  if (touchId === null) return touchList[0] || null;
 
-    function handleWindowTouchMove(e) {
+  for (let i = 0; i < touchList.length; i += 1) {
+    if (touchList[i].identifier === touchId) {
+      return touchList[i];
+    }
+  }
+
+  return touchList[0] || null;
+}
+
+function handleWindowTouchStart(e) {
+  if (e.touches.length < 2) return;
+
+  touchTemplateDragRef.current = {
+    active: false,
+    pending: false,
+    template: null,
+    offsetX: 0,
+    offsetY: 0,
+    grabRatioX: 0,
+    grabRatioY: 0,
+    startX: 0,
+    startY: 0,
+    lastPos: null,
+  };
+
+  setDraggingTemplate(null);
+  setTouchTemplatePreview(null);
+  setGhost(null);
+
+  return;
+}
+function handleWindowTouchMove(e) {
   if (e.touches.length >= 2) {
     touchTemplateDragRef.current = {
       active: false,
@@ -847,11 +871,13 @@ dragState.lastPos = finalPos;
       clearTouchSelectionState();
     }
 
+    window.addEventListener('touchstart', handleWindowTouchStart, { passive: false });
     window.addEventListener('touchmove', handleWindowTouchMove, { passive: false });
     window.addEventListener('touchend', handleWindowTouchEnd, { passive: false });
     window.addEventListener('touchcancel', handleWindowTouchEnd, { passive: false });
 
     return () => {
+      window.removeEventListener('touchstart', handleWindowTouchStart);
       window.removeEventListener('touchmove', handleWindowTouchMove);
       window.removeEventListener('touchend', handleWindowTouchEnd);
       window.removeEventListener('touchcancel', handleWindowTouchEnd);
