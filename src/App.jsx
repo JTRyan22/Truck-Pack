@@ -2463,13 +2463,17 @@ useEffect(() => {
         className="fixed pointer-events-none border-2 border-yellow-300 bg-yellow-500/20 rounded"
         style={{
   left:
-  touchTemplatePreview.clientX / appScale -
+  (touchTemplatePreview.clientX -
+    (appScrollRef.current?.getBoundingClientRect().left || 0)) /
+    appScale -
   touchTemplatePreview.template.w *
     6 *
     touchTemplatePreview.grabRatioX,
 
 top:
-  touchTemplatePreview.clientY / appScale -
+  (touchTemplatePreview.clientY -
+    (appScrollRef.current?.getBoundingClientRect().top || 0)) /
+    appScale -
   touchTemplatePreview.template.h *
     6 *
     touchTemplatePreview.grabRatioY,
