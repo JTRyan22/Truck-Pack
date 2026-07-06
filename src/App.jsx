@@ -621,16 +621,42 @@ if (isTouchInside(truckRect)) {
   targetZone = 'waiting';
 }
 
-const pos = targetZone
-  ? getAreaPositionFromTopLeft(
-      touch.clientX,
-      touch.clientY,
-      template,
-      caseOffsetX,
-      caseOffsetY,
-      targetZone
-    )
-  : null;
+let pos = null;
+
+if (targetZone === 'truck' && truckRect) {
+  const rawX =
+    (touch.clientX - truckRect.left) /
+      (scale * appScale) -
+    template.w * dragState.grabRatioX;
+
+  const rawY =
+    (touch.clientY - truckRect.top) /
+      (scale * appScale) -
+    template.h * dragState.grabRatioY;
+
+  pos = {
+    x: clamp(
+      rawX,
+      0,
+      Math.max(0, truck.width - template.w)
+    ),
+    y: clamp(
+      rawY,
+      0,
+      Math.max(0, truck.height - template.h)
+    ),
+    zone: 'truck',
+  };
+} else if (targetZone === 'waiting' && waitingRect) {
+  pos = getAreaPositionFromTopLeft(
+    touch.clientX,
+    touch.clientY,
+    template,
+    caseOffsetX,
+    caseOffsetY,
+    'waiting'
+  );
+}
 
 dragState.lastPos = pos;
 
@@ -738,16 +764,44 @@ setGhost(null);
       targetZone = 'waiting';
     }
 
-    dragState.lastPos = targetZone
-      ? getAreaPositionFromTopLeft(
-          touch.clientX,
-          touch.clientY,
-          template,
-          caseOffsetX,
-          caseOffsetY,
-          targetZone
-        )
-      : null;
+    let finalPos = null;
+
+if (targetZone === 'truck' && truckRect) {
+  const rawX =
+    (touch.clientX - truckRect.left) /
+      (scale * appScale) -
+    template.w * dragState.grabRatioX;
+
+  const rawY =
+    (touch.clientY - truckRect.top) /
+      (scale * appScale) -
+    template.h * dragState.grabRatioY;
+
+  finalPos = {
+    x: clamp(
+      rawX,
+      0,
+      Math.max(0, truck.width - template.w)
+    ),
+    y: clamp(
+      rawY,
+      0,
+      Math.max(0, truck.height - template.h)
+    ),
+    zone: 'truck',
+  };
+} else if (targetZone === 'waiting' && waitingRect) {
+  finalPos = getAreaPositionFromTopLeft(
+    touch.clientX,
+    touch.clientY,
+    template,
+    caseOffsetX,
+    caseOffsetY,
+    'waiting'
+  );
+}
+
+dragState.lastPos = finalPos;
   }
 
   finishTouchTemplateDrag();
