@@ -585,14 +585,26 @@ useEffect(() => {
 
   e.preventDefault();
 
-  const pos = getDragPosition(
-    touch.clientX,
-    touch.clientY,
-    template,
-    'truck',
-    dragState.offsetX,
-    dragState.offsetY
-  );
+  const scaledCaseWidth =
+  template.w * scale * appScale;
+
+const scaledCaseHeight =
+  template.h * scale * appScale;
+
+const caseOffsetX =
+  scaledCaseWidth * dragState.grabRatioX;
+
+const caseOffsetY =
+  scaledCaseHeight * dragState.grabRatioY;
+
+const pos = getDragPosition(
+  touch.clientX,
+  touch.clientY,
+  template,
+  'truck',
+  caseOffsetX,
+  caseOffsetY
+);
 
   dragState.lastPos = pos;
 
@@ -609,8 +621,8 @@ if (pos) {
     template,
     clientX: touch.clientX,
     clientY: touch.clientY,
-    offsetX: dragState.offsetX,
-    offsetY: dragState.offsetY,
+    grabRatioX: dragState.grabRatioX,
+    grabRatioY: dragState.grabRatioY,
   });
 
   setGhost(null);
@@ -1793,6 +1805,16 @@ const rawY =
 
     const offsetX = touch.clientX - rect.left;
     const offsetY = touch.clientY - rect.top;
+    const grabRatioX = Math.max(
+  0,
+  Math.min(1, offsetX / rect.width)
+);
+
+const grabRatioY = Math.max(
+  0,
+  Math.min(1, offsetY / rect.height)
+);
+
     const pos = getDragPosition(
       touch.clientX,
       touch.clientY,
@@ -1808,6 +1830,8 @@ const rawY =
   template: dragTemplate,
   offsetX,
   offsetY,
+  grabRatioX,
+  grabRatioY,
   startX: touch.clientX,
   startY: touch.clientY,
   lastPos: null,
@@ -2422,13 +2446,16 @@ useEffect(() => {
         className="fixed pointer-events-none border-2 border-yellow-300 bg-yellow-500/20 rounded"
         style={{
   left:
-    (touchTemplatePreview.clientX -
-      touchTemplatePreview.offsetX) /
-    appScale,
-  top:
-    (touchTemplatePreview.clientY -
-      touchTemplatePreview.offsetY) /
-    appScale,
+  touchTemplatePreview.clientX / appScale -
+  touchTemplatePreview.template.w *
+    6 *
+    touchTemplatePreview.grabRatioX,
+
+top:
+  touchTemplatePreview.clientY / appScale -
+  touchTemplatePreview.template.h *
+    6 *
+    touchTemplatePreview.grabRatioY,
   width:
     touchTemplatePreview.template.w * 6,
   height:
