@@ -1644,8 +1644,13 @@ function splitSelectedStack() {
     const area = getAreaSize(zone);
     if (!rect || !item || !selectedTruck) return null;
 
-    const rawX = (clientX - rect.left - offsetX) / scale;
-    const rawY = (clientY - rect.top - offsetY) / scale;
+    const rawX =
+  (clientX - rect.left - offsetX) /
+  (scale * appScale);
+
+const rawY =
+  (clientY - rect.top - offsetY) /
+  (scale * appScale);
 
     const edgeInsetUnits = boardEdgeInsetPx / scale;
 
