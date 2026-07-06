@@ -2467,20 +2467,20 @@ useEffect(() => {
     (appScrollRef.current?.getBoundingClientRect().left || 0)) /
     appScale -
   touchTemplatePreview.template.w *
-    6 *
-    touchTemplatePreview.grabRatioX,
+  scale *
+  touchTemplatePreview.grabRatioX,
 
 top:
   (touchTemplatePreview.clientY -
     (appScrollRef.current?.getBoundingClientRect().top || 0)) /
     appScale -
   touchTemplatePreview.template.h *
-    6 *
-    touchTemplatePreview.grabRatioY,
+  scale *
+  touchTemplatePreview.grabRatioY,
   width:
-    touchTemplatePreview.template.w * 6,
-  height:
-    touchTemplatePreview.template.h * 6,
+  touchTemplatePreview.template.w * scale,
+height:
+  touchTemplatePreview.template.h * scale,
   zIndex: 99999,
   boxSizing: 'border-box',
 }}
