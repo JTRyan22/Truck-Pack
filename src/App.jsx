@@ -2894,7 +2894,10 @@ height:
           </div>
         </div>
 
-        <div className="shrink-0" style={{ width: truckPixelWidth + waitingPixelWidth + 24 }}>
+        <div
+  className="flex-1 min-w-0"
+  style={{ minWidth: truckPixelWidth + waitingPixelWidth + 24 }}
+>
           <div className="space-y-4">
             <div className="flex items-start gap-6">
             <div
@@ -3151,8 +3154,14 @@ height:
             </div>
             </div>
 
-            <div className="truck-print-hide flex items-start gap-6">
-             <div className="bg-slate-800 p-3 rounded flex-1 min-w-0">
+           <div className="truck-print-hide flex flex-col gap-6">
+              <div
+  className="bg-slate-800 p-3 rounded min-w-0"
+style={{
+  width: 'fit-content',
+  maxWidth: 'calc(100vw - 250px)',
+}}
+>
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <h3 className="text-lg font-semibold">Case Selection</h3>
                   <div className="flex gap-2">
