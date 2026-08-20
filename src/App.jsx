@@ -3152,7 +3152,7 @@ height:
             </div>
 
             <div className="truck-print-hide flex items-start gap-6">
-              <div className="bg-slate-800 p-3 rounded" style={{ width: truckPixelWidth }}>
+             <div className="bg-slate-800 p-3 rounded flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <h3 className="text-lg font-semibold">Case Selection</h3>
                   <div className="flex gap-2">
