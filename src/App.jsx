@@ -21,6 +21,8 @@ const ALL_TEMPLATE_CATEGORIES = ['All', ...TEMPLATE_CATEGORIES];
 
 export default function App() {
   const [truckPresets, setTruckPresets] = useState([]);
+  const [templateCategories, setTemplateCategories] = useState(TEMPLATE_CATEGORIES);
+  const allTemplateCategories = ['All', ...templateCategories];
   const [selectedTruckId, setSelectedTruckId] = useState('');
   const [customTruckName, setCustomTruckName] = useState('');
   const [customTruckLength, setCustomTruckLength] = useState('');
@@ -455,11 +457,11 @@ useEffect(() => {
   const hasSelection = selectedCases.length > 0;
 
   useEffect(() => {
-    fetchTruckPresets();
-    fetchTemplates();
-    fetchPacks();
-  }, []);
-
+  fetchTruckPresets();
+  fetchTemplates();
+  fetchTemplateCategories();
+  fetchPacks();
+}, []);
   useEffect(() => {
     function getActiveTouch(touchList) {
   if (!touchList) return null;
@@ -963,7 +965,104 @@ dragState.lastPos = finalPos;
       setSelectedTruckId('');
     }
   }
+  async function fetchTemplateCategories() {
+  const { data, error } = await supabase
+    .from('template_categories')
+    .select('name')
+    .order('created_at', { ascending: true });
 
+  if (error) {
+    console.error('Error loading template categories:', error);
+    return;
+  }
+
+  const names = (data ?? [])
+    .map((row) => row.name)
+    .filter(Boolean);
+
+  if (names.length > 0) {
+    setTemplateCategories(names);
+  }
+}
+async function addTemplateCategory() {
+  const enteredName = window.prompt('New category name:');
+  if (!enteredName) return;
+
+  const name = enteredName.trim();
+  if (!name) return;
+
+  const alreadyExists = templateCategories.some(
+    (category) => category.toLowerCase() === name.toLowerCase()
+  );
+
+  if (alreadyExists) {
+    window.alert('That category already exists.');
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from('template_categories')
+    .insert([{ name }])
+    .select('name')
+    .single();
+
+  if (error) {
+    console.error('Error adding template category:', error);
+    window.alert('Could not add category.');
+    return;
+  }
+
+  setTemplateCategories((prev) => [...prev, data.name]);
+}
+async function deleteTemplateCategory() {
+  const category = selectedTemplateCategory;
+
+  if (!category || category === 'All') {
+    window.alert('Select a category to delete first.');
+    return;
+  }
+
+  const categoryInUse = templates.some(
+    (template) => getTemplateCategory(template) === category
+  );
+
+  if (categoryInUse) {
+    window.alert(
+      `Cannot delete "${category}" because one or more cases are assigned to it.`
+    );
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Delete the category "${category}"?`
+  );
+
+  if (!confirmed) return;
+
+  const { error } = await supabase
+    .from('template_categories')
+    .delete()
+    .eq('name', category);
+
+  if (error) {
+    console.error('Error deleting template category:', error);
+    window.alert('Could not delete category.');
+    return;
+  }
+
+  const remainingCategories = templateCategories.filter(
+    (item) => item !== category
+  );
+
+  setTemplateCategories(remainingCategories);
+  setSelectedTemplateCategory('All');
+
+  if (newTemplateCategory === category) {
+    setNewTemplateCategory(
+      remainingCategories[0] || DEFAULT_TEMPLATE_CATEGORY
+    );
+  }
+}
   async function fetchTemplates() {
     const { data, error } = await supabase
       .from('case_templates')
@@ -1300,7 +1399,7 @@ dragState.lastPos = finalPos;
   }
 
   function normalizeTemplateCategory(category) {
-    return TEMPLATE_CATEGORIES.includes(category) ? category : DEFAULT_TEMPLATE_CATEGORY;
+   return templateCategories.includes(category) ? category : DEFAULT_TEMPLATE_CATEGORY;
   }
 
   function getTemplateCategory(template) {
@@ -2526,7 +2625,7 @@ lineHeight: 1,
     ? templates
     : templates.filter((template) => getTemplateCategory(template) === selectedTemplateCategory);
 
-  const templateCategoryCounts = ALL_TEMPLATE_CATEGORIES.reduce((counts, category) => {
+  const templateCategoryCounts = allTemplateCategories.reduce((counts, category) => {
     counts[category] =
       category === 'All'
         ? templates.length
@@ -2870,7 +2969,7 @@ height:
               onChange={(e) => setNewTemplateCategory(e.target.value)}
               className="w-full mb-2 p-2 bg-slate-900 rounded"
             >
-              {TEMPLATE_CATEGORIES.map((category) => (
+              {templateCategories.map((category) => (
                 <option key={category} value={category}>
                   {category}
                 </option>
@@ -3165,6 +3264,18 @@ style={{
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <h3 className="text-lg font-semibold">Case Selection</h3>
                   <div className="flex gap-2">
+                  <button
+  onClick={addTemplateCategory}
+  className="rounded bg-emerald-700 px-2 py-1 text-sm hover:bg-emerald-600"
+>
+  + Category
+</button>
+<button
+  onClick={deleteTemplateCategory}
+  className="rounded bg-rose-700 px-2 py-1 text-sm hover:bg-rose-600"
+>
+  Delete Category
+</button>
                     <button
                       onClick={fetchTemplates}
                       className="rounded bg-slate-700 px-2 py-1 text-sm hover:bg-slate-600"
@@ -3186,7 +3297,7 @@ style={{
                     onChange={(e) => setSelectedTemplateCategory(e.target.value)}
                     className="rounded bg-slate-900 p-2 text-sm"
                   >
-                    {ALL_TEMPLATE_CATEGORIES.map((category) => (
+                    {allTemplateCategories.map((category) => (
                       <option key={category} value={category}>
                         {category} ({templateCategoryCounts[category] || 0})
                       </option>
@@ -3229,7 +3340,7 @@ style={{
                         onChange={(e) => updateTemplateCategory(t.id, e.target.value)}
                         className="w-full rounded bg-slate-900 p-1 text-xs text-slate-200"
                       >
-                        {TEMPLATE_CATEGORIES.map((category) => (
+                        {templateCategories.map((category) => (
                           <option key={category} value={category}>
                             {category}
                           </option>
