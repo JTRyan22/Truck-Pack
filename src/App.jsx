@@ -445,11 +445,11 @@ useEffect(() => {
 
   const scale = 14;
   const boardEdgeInsetPx = 2;
-  const truckPixelWidth = Math.max(truck.width * scale, 300);
+  const truckPixelWidth = truck.width * scale;
   const truckPixelHeight = Math.max(truck.height * scale, 120);
-  const waitingArea = { width: Math.max(truck.width, 20), height: Math.max(truck.height, 12) };
-  const waitingPixelWidth = Math.max(waitingArea.width * scale, truckPixelWidth);
-  const waitingPixelHeight = Math.max(waitingArea.height * scale, truckPixelHeight);
+  const waitingArea = { width: truck.width, height: truck.height };
+const waitingPixelWidth = truckPixelWidth;
+const waitingPixelHeight = truckPixelHeight;
   const dragGraceUnits = 1.5;
 
   const selectedCases = cases.filter((c) => selectedIds.includes(c.id));
