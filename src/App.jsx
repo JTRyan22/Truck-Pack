@@ -447,6 +447,11 @@ useEffect(() => {
   const boardEdgeInsetPx = 2;
   const truckPixelWidth = truck.width * scale;
   const truckPixelHeight = Math.max(truck.height * scale, 120);
+  const printScale = Math.min(
+  720 / truckPixelWidth,
+  900 / truckPixelHeight,
+  2.2
+);
   const waitingArea = { width: truck.width, height: truck.height };
 const waitingPixelWidth = truckPixelWidth;
 const waitingPixelHeight = truckPixelHeight;
@@ -2534,10 +2539,12 @@ setGhost(null);
 
   function renderFloatingCaseLabel(caseItem, zoneCases) {
     const styleInfo = getFloatingLabelStyle(caseItem, zoneCases);
+    const stackCount = getOverlayGroup(caseItem, zoneCases).length;
 
     return (
       <div
         key={`${caseItem.id}-floating-label`}
+        data-stack-count={stackCount > 1 ? stackCount : undefined}
         className="truck-print-label absolute pointer-events-none flex items-center justify-center overflow-visible rounded [px-1] text-center font-semibold"
         style={{
           left: styleInfo.left,
@@ -2769,11 +2776,12 @@ height:
           }
 
           .truck-print-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
-            margin: 0 !important;
-            overflow: hidden !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  zoom: var(--truck-print-scale);
+  margin: 0 !important;
+  overflow: hidden !important;
             padding-bottom: 0 !important;
             box-sizing: border-box !important;
             background-color: white !important;
@@ -2795,38 +2803,27 @@ height:
           .truck-print-area > div {
             border-color: black !important;
           }
-
-          .truck-print-label {
-  color: white !important;
+.truck-print-label[data-stack-count] {
   background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95) !important;
-  overflow: visible !important;
-  padding: 0 1px !important;
-  line-height: 1.1 !important;
-  font-size: 14px !important;
-  font-weight: 700 !important;
 }
 
-.truck-print-label span {
-  color: white !important;
-  background-color: rgba(15, 23, 42, 0.85) !important;
-  background-image: none !important;
-  display: inline-block !important;
-  font-weight: 700 !important;
-  padding: 2px 6px !important;
-  border-radius: 3px !important;
-  -webkit-line-clamp: unset !important;
-  overflow: visible !important;
-  max-height: none !important;
-  white-space: normal !important;
-  line-height: 1.1 !important;
-  font-size: 14px !important;
-  -webkit-print-color-adjust: exact !important;
-  print-color-adjust: exact !important;
-  -webkit-box-decoration-break: clone !important;
-  box-decoration-break: clone !important;
+.truck-print-label[data-stack-count]::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid black;
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.truck-print-label[data-stack-count]::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border: 1px solid black;
+  border-radius: 2px;
+  pointer-events: none;
 }
 
           .truck-print-area button,
@@ -3031,6 +3028,7 @@ height:
               style={{
                 width: truckPixelWidth,
                 height: truckPixelHeight,
+                '--truck-print-scale': printScale,
                 boxSizing: 'border-box',
                 touchAction: 'none',
                 backgroundImage: `
